@@ -1207,15 +1207,21 @@ function buildForestWorld(){
   const bridgeY=76;
   const bx0=Math.floor(riverX(bridgeY)-4), bx1=Math.ceil(riverX(bridgeY)+4);
   for(let x=bx0;x<=bx1;x++) for(let y=bridgeY-1;y<=bridgeY+1;y++) water[y*FW+x]=0;
-  // 湖泊：占据左下角一大块，边缘不规则
-  for(let y=72;y<FH-2;y++) for(let x=2;x<62;x++){
-    // 从右下往左上推进的边界曲线（带噪声）
-    const edge = 58
-      + Math.sin(y*0.21)*7
-      + Math.sin(y*0.07+1.7)*11
-      + (hash(x*3+1,y*5+2)-0.5)*3;
+  // 湖泊：左下角，边缘用多层噪声推成的有机曲线（避开入口走廊）
+  for(let y=70;y<FH-2;y++) for(let x=2;x<70;x++){
+    if(x<16 && y>68 && y<86) continue;           // 入口走廊保持陆地
+    const t=(y-70)/Math.max(1,(FH-72));
+    const edge = 20 + t*40
+      + Math.sin(y*0.19)*5.5
+      + Math.sin(y*0.061+1.3)*8
+      + Math.sin(x*0.13+y*0.21)*2.5
+      + (hash(x*3+1,y*5+2)-0.5)*2.2;
     if(x < edge) water[y*FW+x]=1;
   }
+  // 入口走廊强制清空水面
+  for(let y=70;y<84;y++) for(let x=2;x<17;x++) water[y*FW+x]=0;
+  // 入口走廊铺土路
+  for(let y=74;y<=78;y++) for(let x=2;x<20;x++) road[y*FW+x]=1;
   // 湖泊/河流修补：填洞 + 去孤岛
   for(let pass=0;pass<2;pass++){
     const copy=water.slice();
@@ -2087,16 +2093,16 @@ function drawForestBush(sx,sy,tx,ty){
 function drawForestWall(sx,sy,tx,ty){
   // 棕褐色土块墙：边缘起伏 + 内部随机纹路
   const h=hash(tx*3+5,ty*9+1), h2=hash(tx*7+2,ty*11+6);
-  const bump=Math.floor(h2*4);
+  const bump=Math.floor(h2*6);
   octx.fillStyle = h<0.5 ? '#6b4a2e' : '#755134';
   octx.fillRect(sx,sy,TILE,TILE);
   // 顶部起伏的草坡
-  if(bump>0){
-    octx.fillStyle='#4f8f3a';
-    octx.fillRect(sx, sy+TILE-bump, TILE, bump);
-    octx.fillStyle='#3f7a2e';
-    octx.fillRect(sx+Math.floor(h*8), sy+TILE-bump, 3, 1);
-  }
+  octx.fillStyle='#4f8f3a';
+  octx.fillRect(sx, sy+TILE-bump, TILE, bump);
+  octx.fillStyle='#3f7a2e';
+  octx.fillRect(sx+Math.floor(h*10), sy+TILE-bump+1, 2, 2);
+  octx.fillStyle='#5da648';
+  if(h>0.6) octx.fillRect(sx+Math.floor(h2*9), sy+TILE-Math.max(1,bump-1), 3, 1);
   // 内部随机土纹
   for(let i=0;i<5;i++){
     const hh=hash(tx*13+i, ty*17+i*3);
@@ -2132,8 +2138,18 @@ function drawForestWater(sx,sy,tx,ty){
   const cnt=tileWaterCnt[ty*WCOLS+tx];
   if(!cnt) { drawForestGrass(sx,sy,tx,ty); return; }
   octx.fillStyle='#2f6fb0'; octx.fillRect(sx,sy,TILE,TILE);
-  if(hash(tx,ty)>0.5){ px(sx+3,sy+5,5,1,'#4a8fd4'); px(sx+9,sy+11,4,1,'#4a8fd4'); }
-  else { px(sx+5,sy+9,6,1,'#4a8fd4'); }
+  // 岸边浅色过渡
+  const nearLand = !(forestWater[(ty)*FW+tx+1]) || !(forestWater[(ty)*FW+tx-1])
+                || !(forestWater[(ty+1)*FW+tx]) || !(forestWater[(ty-1)*FW+tx]);
+  if(nearLand){
+    octx.fillStyle='#3f86c9';
+    if(!forestWater[ty*FW+tx+1]) octx.fillRect(sx+TILE-3, sy, 3, TILE);
+    if(!forestWater[ty*FW+tx-1]) octx.fillRect(sx, sy, 3, TILE);
+    if(!forestWater[(ty+1)*FW+tx]) octx.fillRect(sx, sy+TILE-3, TILE, 3);
+    if(!forestWater[(ty-1)*FW+tx]) octx.fillRect(sx, sy, TILE, 3);
+  }
+  if(hash(tx,ty)>0.5){ px(sx+5,sy+6,5,1,'#4a8fd4'); px(sx+9,sy+11,4,1,'#4a8fd4'); }
+  else { px(sx+7,sy+9,5,1,'#4a8fd4'); }
   octx.fillStyle='#245a94'; octx.fillRect(sx, sy+TILE-1, TILE, 1);
 }
 function renderShopRoom(){
