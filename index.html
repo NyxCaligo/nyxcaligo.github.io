@@ -4419,6 +4419,11 @@ function updateInteract(){
         if(dd<20 && facingTarget(cx,cy) && dd<bd){ bd=dd; best={k:'prop', p:pr, dist:dd}; }
       }
     }
+    // 复活泉水
+    if(!best){
+      const dd=Math.hypot(player.x-REVIVE_POINT.x, player.y-REVIVE_POINT.y);
+      if(dd<30 && facingTarget(REVIVE_POINT.x, REVIVE_POINT.y-6)) best={k:'shrine', dist:dd};
+    }
     // 训练假人
     if(!best){
       const dd=Math.hypot(player.x-DUMMY.x, player.y-DUMMY.y);
@@ -4449,6 +4454,7 @@ document.getElementById('interactBtn').onclick=()=>{
   if(t.k==='drop'){ pickupDrop(t.d); return; }
   if(t.k==='door'){ sfxBeep(); toastMsg('商店'); setTimeout(()=>{ enterShop(); }, 260); return; }
   if(t.k==='prop'){ sfxBeep(); toastMsg(PROP_TEXT[t.p.type]||'……'); return; }
+  if(t.k==='shrine'){ sfxBeep(); toastMsg('难道这就是我的家吗？'); return; }
   if(t.k==='dummy'){ sfxBeep(); toastMsg('这东西会不会活过来。'); return; }
   if(t.k==='exitDoor'){ sfxBeep(); exitShop(); return; }
   if(t.k==='counter'){ sfxBeep(); openShop(); return; }
@@ -5936,6 +5942,10 @@ function drawInteractMarkers(){
   }
   if(interactTarget.k==='door'){
     drawStar(Math.round(SHOP_DOOR.x-camX)+14, Math.round(SHOP_DOOR.y-camY)-18, 1);
+    return;
+  }
+  if(interactTarget.k==='shrine'){
+    drawStar(Math.round(REVIVE_POINT.x-camX), Math.round(REVIVE_POINT.y-camY)-34, 1);
     return;
   }
   if(interactTarget.k==='drop'){
