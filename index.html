@@ -658,6 +658,7 @@
     <button id="devGod" class="sp-full sp-alt">无敌模式：关</button>
     <button id="devOneHit" class="sp-full sp-alt">一刀秒杀：关</button>
     <button id="devClearMobs" class="sp-full sp-alt">清理所有怪物</button>
+    <button id="devSpeed" class="sp-full sp-alt">移速大增：关</button>
     <button id="devClose" class="sp-full">关闭</button>
   </div>
 </div>
@@ -922,9 +923,9 @@
 <script>
 "use strict";
 let VW=352, VH=176;
-const TILE=16, WCOLS=64, WROWS=44;
+const TILE=16; let WCOLS=64, WROWS=44;
 const RES=2;   // 内部渲染精度：2 倍，像素视觉大小不变，但镜头可半格移动
-const WORLD_W=WCOLS*TILE, WORLD_H=WROWS*TILE;
+let WORLD_W=WCOLS*TILE, WORLD_H=WROWS*TILE;
 let JBX=70, JBY=140; const JR=30;   // 常驻摇杆位置（左下，随屏幕）
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 const off = document.createElement('canvas'); off.width=VW*RES; off.height=VH*RES;
@@ -992,7 +993,7 @@ function hash(x,y){
 
 // ---------- 世界生成 ----------
 // 0 草地  2 边界丘陵
-const world = [];
+let world = [];
 for(let y=0;y<WROWS;y++){
   const row=[];
   for(let x=0;x<WCOLS;x++){
@@ -1003,7 +1004,7 @@ for(let y=0;y<WROWS;y++){
 }
 
 // ---------- 房屋 ----------
-const BUILDINGS = [
+let BUILDINGS = [
   {x:440, y:280, w:88, h:76, v:0, c:0, ch:1, f:0},
   {x:556, y:300, w:64, h:60, v:1, c:0, f:0},
   {x:330, y:270, w:64, h:58, v:2, c:0, f:0},
@@ -1028,10 +1029,11 @@ const ROADS = [
   {x1:429, y1:222, x2:429, y2:440, w:22},  // H 茅草屋
 ];
 
+let TOWN_SNAPSHOT=null;
 // ---------- 路面遮罩（2 像素一格，边缘随机） ----------
 const MW=Math.ceil(WORLD_W/2), MH=Math.ceil(WORLD_H/2);
 const roadMask=new Uint8Array(MW*MH);
-const tileRoadCnt=new Uint8Array(WCOLS*WROWS);
+let tileRoadCnt=new Uint8Array(WCOLS*WROWS);
 for(let my=0;my<MH;my++) for(let mx=0;mx<MW;mx++){
   const wx=mx*2+1, wy=my*2+1;
   let best=1e9;
@@ -1049,7 +1051,7 @@ for(let ty=0;ty<WROWS;ty++) for(let tx=0;tx<WCOLS;tx++){
 const RIVER={x1:-30,y1:540,x2:1060,y2:540,w:78};
 const BRIDGE={x:655,y:490,w:48,h:104};
 const waterMask=new Uint8Array(MW*MH);
-const tileWaterCnt=new Uint8Array(WCOLS*WROWS);
+let tileWaterCnt=new Uint8Array(WCOLS*WROWS);
 for(let my=0;my<MH;my++) for(let mx=0;mx<MW;mx++){
   const wx=mx*2+1, wy=my*2+1;
   let d=segDist(wx,wy,RIVER.x1,RIVER.y1,RIVER.x2,RIVER.y2)-RIVER.w/2;
@@ -1170,8 +1172,157 @@ cv.addEventListener('mousedown', e=>{
 cv.addEventListener('mousemove', e=>{ if(!joy.active)return; const [vx,vy]=toV(e.clientX,e.clientY); joyMove(vx,vy); });
 cv.addEventListener('mouseup', ()=>{ joy.active=false; joy.dx=joy.dy=0; });
 
+// ---------- 森林地图 ----------
+const FW=100, FH=100;
+let location='town';
+let forestWorld=null, forestRoad=null, forestWater=null, forestMobs=[];
+let townData=null;
+function buildForestWorld(){
+  const w=[];
+  for(let y=0;y<FH;y++){ const row=[]; for(let x=0;x<FW;x++){
+    const edge=Math.min(x,y,FW-1-x,FH-1-y);
+    row.push(edge<2?2:0);
+  } w.push(row); }
+  const road=new Uint8Array(FW*FH), water=new Uint8Array(FW*FH);
+  // 河流（竖向，带弯曲）
+  const riverX=(y)=> 62 + Math.sin(y*0.09)*7;
+  for(let y=3;y<FH-3;y++){
+    const cx=riverX(y);
+    for(let x=Math.floor(cx-3);x<=Math.ceil(cx+3);x++){
+      if(x<3||x>=FW-3) continue;
+      const d=Math.abs(x-cx);
+      if(d<3.2) water[y*FW+x]=1;
+    }
+  }
+  // 木桥
+  const bridgeY=52;
+  for(let x=Math.floor(riverX(bridgeY)-4);x<=Math.ceil(riverX(bridgeY)+4);x++){
+    for(let y=bridgeY-1;y<=bridgeY+1;y++) water[y*FW+x]=0;
+  }
+  // 湖泊（西侧）
+  const lakeX=26, lakeY=72, lakeR=11;
+  for(let y=lakeY-lakeR;y<=lakeY+lakeR;y++) for(let x=lakeX-lakeR;x<=lakeX+lakeR;x++){
+    if(x<3||y<3||x>=FW-3||y>=FH-3) continue;
+    const d=Math.hypot((x-lakeX)*0.9,(y-lakeY)*1.15);
+    if(d<lakeR + (hash(x*5+11,y*3+7)-0.5)*2.5) water[y*FW+x]=1;
+  }
+  // 土路：西入口 → 桥 → 东侧
+  const path=[[6,52],[20,52],[38,50],[Math.round(riverX(52)),52],[70,54],[88,52],[94,52]];
+  for(let i=0;i<path.length-1;i++){
+    const [x1,y1]=path[i], [x2,y2]=path[i+1];
+    const steps=Math.max(Math.abs(x2-x1),Math.abs(y2-y1))*2;
+    for(let t=0;t<=steps;t++){
+      const x=Math.round(x1+(x2-x1)*t/steps), y=Math.round(y1+(y2-y1)*t/steps);
+      for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){
+        const nx=x+dx, ny=y+dy;
+        if(nx<3||ny<3||nx>=FW-3||ny>=FH-3) continue;
+        if(Math.hypot(dx,dy)<=2.2) road[ny*FW+nx]=1;
+      }
+    }
+  }
+  // 土堆（障碍）
+  for(let i=0;i<28;i++){
+    const bx=8+Math.floor(hash(i*13+5,9)*84), by=8+Math.floor(hash(7,i*17+3)*84);
+    if(road[by*FW+bx]||water[by*FW+bx]) continue;
+    const r=1+Math.floor(hash(i,11)*2);
+    for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){
+      const nx=bx+dx, ny=by+dy;
+      if(nx<3||ny<3||nx>=FW-3||ny>=FH-3) continue;
+      if(road[ny*FW+nx]||water[ny*FW+nx]) continue;
+      w[ny][nx]=3; // 土堆
+    }
+  }
+  forestMobs=[];
+  let placed=0, guard=0;
+  while(placed<90 && guard<6000){
+    guard++;
+    const x=4+Math.floor(Math.random()*92);
+    const y=4+Math.floor(Math.random()*92);
+    const i=y*FW+x;
+    if(road[i]||water[i]) continue;
+    if(w[y][x]!==0) continue;
+    if(Math.abs(x-7)<5 && Math.abs(y-52)<7) continue;
+    // 只要求本格与四邻不是水面/道路
+    let ok=true;
+    for(const [dx,dy] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx, ny=y+dy;
+      if(nx<3||ny<3||nx>=FW-3||ny>=FH-3){ ok=false; break; }
+      if(road[ny*FW+nx]||water[ny*FW+nx]){ ok=false; break; }
+    }
+    // 不要和其它树石重叠
+    if(ok){
+      for(const m of forestMobs){
+        if(Math.hypot(m.x-(x*TILE+8), m.y-(y*TILE+8)) < 20){ ok=false; break; }
+      }
+    }
+    if(!ok) continue;
+    const isTree = hash(x*3+1, y*5+2) > 0.42;
+    forestMobs.push({kind:isTree?'tree':'rock',
+      x:x*TILE+TILE/2, y:y*TILE+TILE/2,
+      hp:isTree?12:16, maxHp:isTree?12:16, r:isTree?9:8, dead:false});
+    placed++;
+  }
+  return {world:w, road, water};
+}
+function drawForestMob(m){
+  const x=Math.round((m.x-camX)*RES)/RES, y=Math.round((m.y-camY)*RES)/RES;
+  if(m.kind==='tree'){
+    px(x-7, y+1, 14, 3, 'rgba(0,0,0,.22)');
+    px(x-2, y-10, 4, 12, '#5a3d22');
+    px(x-9, y-24, 18, 12, '#2f6b3a');
+    px(x-7, y-28, 14, 8, '#3a7d46');
+    px(x-5, y-31, 10, 5, '#48915a');
+    px(x-6, y-27, 4, 4, '#63a86f');
+    px(x+3, y-23, 4, 3, '#57a066');
+  } else {
+    px(x-8, y+1, 16, 3, 'rgba(0,0,0,.2)');
+    px(x-7, y-6, 14, 8, '#7b8390');
+    px(x-6, y-8, 12, 5, '#8f98a5');
+    px(x-4, y-9, 8, 3, '#a9b2bf');
+    px(x-7, y-1, 14, 3, '#5f6672');
+  }
+}
+function forestSolid(x,y){
+  const tx=Math.floor(x/TILE), ty=Math.floor(y/TILE);
+  if(tx<0||ty<0||tx>=FW||ty>=FH) return true;
+  if(forestRoad[ty*FW+tx]) return false;
+  if(forestWater[ty*FW+tx]) return true;
+  if(forestWorld[ty][tx]!==0) return true;
+  for(const m of forestMobs){
+    if(m.dead) continue;
+    if(Math.hypot(x-m.x, y-m.y) < (m.r||8)) return true;
+  }
+  return false;
+}
+function setMap(name){
+  if(name===location) return;
+  if(!townData){
+    townData={ world, road:tileRoadCnt, water:tileWaterCnt, buildings:BUILDINGS, props:PROPS,
+               W:WCOLS, H:WROWS };
+  }
+  location=name;
+  if(name==='forest'){
+    if(!forestWorld){ const f=buildForestWorld(); forestWorld=f.world; forestRoad=f.road; forestWater=f.water; }
+    WCOLS=FW; WROWS=FH;
+    world=forestWorld;
+    tileRoadCnt=forestRoad;
+    tileWaterCnt=forestWater;
+    BUILDINGS=[]; PROPS=[];
+  } else {
+    WCOLS=townData.W; WROWS=townData.H;
+    world=townData.world; tileRoadCnt=townData.road; tileWaterCnt=townData.water;
+    BUILDINGS=townData.buildings; PROPS=townData.props;
+  }
+  WORLD_W=WCOLS*TILE; WORLD_H=WROWS*TILE;
+  chunkCache.clear();
+  tilePassCache=null; tileCostCache=null; flowDist=null;
+  try{ buildMini(); }catch(e){}
+  try{ buildTileCaches(); }catch(e){}
+}
+
 // ---------- 碰撞 ----------
 function solidAt(px,py){
+  if(location==='forest' && forestWorld) return forestSolid(px,py);
   const tx=Math.floor(px/TILE), ty=Math.floor(py/TILE);
   if(tx<0||ty<0||tx>=WCOLS||ty>=WROWS) return true;
   if(world[ty][tx]!==0) return true;
@@ -1562,7 +1713,7 @@ function drawHouse(b){
     px(x+w/2+11, dy-6, 3, 4, '#fbbf24');
   }
 }
-const PROPS=[
+let PROPS=[
   {type:'well', x:800, y:380},
   {type:'lamp', x:640, y:420},
   {type:'lamp', x:745, y:420},
@@ -2029,6 +2180,13 @@ function render(){
   if(vis(NPC.x-16,NPC.y-24,32,40)) ds.push({bottom:NPC.y, draw:drawNPC});
   if(vis(DUMMY.x-12,DUMMY.y-26,24,30)) ds.push({bottom:DUMMY.y, draw:drawDummy});
   for(const sl of slimes) ds.push({bottom:sl.y, draw:()=>drawSlime(sl)});
+  if(location==='forest'){
+    for(const m of forestMobs){
+      if(m.dead) continue;
+      if(!vis(m.x-40, m.y-50, 80, 60)) continue;
+      ds.push({bottom:m.y, draw:()=>drawForestMob(m)});
+    }
+  }
   if(vis(ELDER.x-8,ELDER.y-20,16,30)) ds.push({bottom:ELDER.y, draw:drawElder});
   if(vis(OFFICER.x-8,OFFICER.y-20,16,30)) ds.push({bottom:OFFICER.y, draw:drawOfficer});
   ds.push({bottom:SHOP_DOOR.y+2, draw:drawShopDoorMark});
@@ -3913,6 +4071,13 @@ document.getElementById('devGod').onclick=(e)=>{
   toastMsg(godMode?'无敌模式已开启':'无敌模式已关闭');
 };
 document.getElementById('devClearMobs').onclick=()=>{ slimes=[]; toastMsg('已清理所有怪物'); };
+document.getElementById('devSpeed').onclick=(e)=>{
+  const on = player.speed!==300;
+  player.speed = on ? 300 : 120;
+  e.target.textContent='移速大增：'+(on?'开':'关');
+  e.target.classList.toggle('on', on);
+  toastMsg(on?'移速 300':'移速恢复 120');
+};
 document.getElementById('devResetStory2').onclick=()=>{
   storyTalked=false; try{ dlgGiven={}; }catch(e){}
   saveGame(); toastMsg('剧情已重置，可再次与艾琳对话');
@@ -4473,6 +4638,10 @@ function updateInteract(){
     const dist=Math.hypot(player.x-d.x, player.y-d.y);
     if(dist<22 && facingTarget(d.x,d.y) && dist<bd){ bd=dist; best={k:'drop', d}; }
   }
+  if(location==='forest'){
+    if(player.x<9*TILE && Math.abs(player.y-52*TILE)<40){ interactTarget={k:'exitForest'}; nearNpc=true; updateHudButtons(); return; }
+    interactTarget=null; nearNpc=false; updateHudButtons(); return;
+  }
   if(!best){
     consider('npc', NPC.x, NPC.y, {npc:'erin'}, 0);
     consider('npc', ELDER.x, ELDER.y, {npc:'elder'}, 0);
@@ -4532,6 +4701,7 @@ document.getElementById('interactBtn').onclick=()=>{
   if(t.k==='door'){ sfxBeep(); toastMsg('商店'); setTimeout(()=>{ enterShop(); }, 260); return; }
   if(t.k==='prop'){ sfxBeep(); toastMsg(PROP_TEXT[t.p.type]||'……'); return; }
   if(t.k==='shrine'){ sfxBeep(); toastMsg('难道这就是我的家吗？'); return; }
+  if(t.k==='exitForest'){ sfxBeep(); leaveForest(); return; }
   if(t.k==='gate'){
     sfxBeep();
     if(!questCleared){ toastMsg('城门紧闭……（先通过罗兰的试炼）'); return; }
@@ -4920,6 +5090,25 @@ function doAttack(){
   {
     const it2=ITEMS[wid]||{};
     const wkb=it2.kb!=null?it2.kb:1;
+    if(location==='forest'){
+      for(const fm of forestMobs){
+        if(fm.dead) continue;
+        const fdx=fm.x-player.x, fdy=fm.y-player.y;
+        if(Math.hypot(fdx,fdy)<34 && (fdx*player.face)>=-8){
+          const fdmg=Math.max(1, Math.round((ITEMS[wid].dmg||5)));
+          fm.hp-=fdmg;
+          addDmgNum(fm.x, fm.y-22, fdmg, false);
+          spawnHitSpark(fm.x, fm.y-10);
+          sfxHit();
+          if(fm.hp<=0){
+            fm.dead=true;
+            if(fm.kind==='tree'){ addItem('wood', 2+Math.floor(Math.random()*3)); toastMsg('获得木头'); }
+            else { addItem('wood', 1); }
+            sfxEquip();
+          }
+        }
+      }
+    }
     const hits=[];
     for(const sl of slimes){
       const sdx=sl.x-player.x, sdy=sl.y-player.y;
@@ -4931,6 +5120,7 @@ function doAttack(){
       const crit2=Math.random()*100<(it2.crit||4);
       let dmg2=Math.max(1, Math.round((it2.dmg||5)*(crit2?(it2.critMult||1.7):1)));
       if(oneHitKill) dmg2=Math.max(dmg2, h.sl.hp);
+      dmg2=calcDamage(dmg2, h.sl.armor||0, h.sl.resist||0, 'physical');
       hitSlime(h.sl, dmg2, crit2, wkb);
     }
   }
@@ -4952,7 +5142,7 @@ let slimes=[];
 let godMode=false, oneHitKill=false;
 function newSlime(x,y){
   return {x, y, hp:20, maxHp:20, dmg:4, r:10, vx:0, vy:0,
-          iframe:0, atkCd:1, hitFlash:0, atkAnim:0, wob:Math.random()*6, face:1,
+          iframe:0, atkCd:1, hitFlash:0, atkAnim:0, wob:Math.random()*6, face:1, armor:0, resist:0,
           side:Math.random()<0.5?1:-1, stuck:0};
 }
 let playerIframe=0, playerHurt=0, guardTalked=false;
@@ -5085,6 +5275,24 @@ function spawnSlime(n){
 function splayerGuardX(x){ return Math.max(20, Math.min(WORLD_W-20, x)); }
 function splayerGuardY(y){ return Math.max(20, Math.min(WORLD_H-20, y)); }
 // 击退公式：攻击方击退值 vs 被击退方重量，收益递减，不会夸张
+// 伤害减免：每 2 点护甲/魔抗 → 减 1 点伤害（向下取整），最低 1
+function calcDamage(raw, armor, resist, type){
+  const d=Math.max(1, Math.round(raw));
+  if(type==='magic'){ return Math.max(1, d - Math.floor((resist||0)/2)); }
+  return Math.max(1, d - Math.floor((armor||0)/2));
+}
+function playerArmorTotal(){
+  let a=0;
+  for(const id of EQUIP.armors){ if(id&&ITEMS[id]) a+=(ITEMS[id].armor||0); }
+  // 套装加成
+  for(const sk of Object.keys(SETS)){
+    const st=SETS[sk];
+    const partIds=Object.keys(ITEMS).filter(k=>ITEMS[k].set===sk && ITEMS[k].t==='armor');
+    const worn=partIds.filter(k=>EQUIP.armors.includes(k)).length;
+    if(worn>=st.parts) a+=st.bonus;
+  }
+  return a;
+}
 function knockbackForce(kb, weight){
   const k=Math.max(0, kb||0), w=Math.max(1, weight||1);
   return Math.min(180, 80*k/(k+w));
@@ -5409,14 +5617,15 @@ function updateSlime(dt){
     if(dist<16 && s.atkCd<=0){
       s.atkCd=1.2; s.atkAnim=0.22;
       if(playerIframe<=0 && player.hp>0 && !godMode){
-        player.hp=Math.max(0,player.hp-s.dmg);
+        const realDmg=calcDamage(s.dmg, playerArmorTotal(), 0, 'physical');
+        player.hp=Math.max(0,player.hp-realDmg);
         {
           const f=knockbackForce(s.dmg*0.5, PLAYER_WEIGHT);
           const kdx=player.x-s.x, kdy=player.y-s.y, kd=Math.hypot(kdx,kdy)||1;
           pvx=kdx/kd*f; pvy=kdy/kd*f;
         }
         playerIframe=0.4; playerHurt=0.32;
-        addDmgNum(player.x, player.y-20, s.dmg, false);
+        addDmgNum(player.x, player.y-20, realDmg, false);
         vibrate(3); sfxHurt();
         if(player.hp<=0) killPlayer();
         else saveGame();
@@ -5661,8 +5870,18 @@ function centerRoomCam(){
   camXs=camX; camYs=camY;
 }
 function enterForest(){
-  toastMsg('森林地图开发中……');
-  saveGame();
+  setMap('forest');
+  player.x=7*TILE; player.y=52*TILE; player.face=1;
+  camXs=player.x-VW/2; camYs=player.y-VH/2;
+  toastMsg('进入了森林');
+  sfxEquip(); saveGame();
+}
+function leaveForest(){
+  setMap('town');
+  player.x=GATE.x-34; player.y=GATE.y-24; player.face=-1;
+  camXs=player.x-VW/2; camYs=player.y-VH/2;
+  toastMsg('回到了城镇');
+  sfxEquip(); saveGame();
 }
 function enterShop(){
   if(inShop) return;
@@ -5966,10 +6185,11 @@ function drawSlime(SLIME){
     octx.fillRect(bx-1, byy, w+2, h+1);
     octx.globalAlpha=1;
   }
-  // 血条（绿→黄→红 平滑渐变，低血量保持高亮度）
-  const bw=20, hx=Math.round(cx-bw/2), hy=Math.round(byy-7);
-  octx.fillStyle='rgba(11,15,26,.78)'; octx.fillRect(hx-1, hy-1, bw+2, 5);
-  octx.fillStyle='#1c2129'; octx.fillRect(hx, hy, bw, 3);
+  // 血条（细、满血隐藏）
+  if(SLIME.hp<SLIME.maxHp){
+  const bw=20, hx=Math.round(cx-bw/2), hy=Math.round(byy-6);
+  octx.fillStyle='rgba(11,15,26,.78)'; octx.fillRect(hx-1, hy-1, bw+2, 4);
+  octx.fillStyle='#1c2129'; octx.fillRect(hx, hy, bw, 2);
   {
     const r=Math.max(0, Math.min(1, SLIME.hp/SLIME.maxHp));
     const hue=Math.round(120*r);
@@ -5977,10 +6197,9 @@ function drawSlime(SLIME){
     const wpx=Math.max(0, Math.round(bw*r));
     if(wpx>0){
       octx.fillStyle='hsl('+hue+',82%,'+lig+'%)';
-      octx.fillRect(hx, hy, wpx, 3);
-      octx.fillStyle='hsla('+hue+',95%,82%,.75)';
-      octx.fillRect(hx, hy, wpx, 1);
+      octx.fillRect(hx, hy, wpx, 2);
     }
+  }
   }
 }
 function drawOrbs(){
