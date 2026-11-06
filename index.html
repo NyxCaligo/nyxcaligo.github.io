@@ -1805,6 +1805,9 @@ function renderShopRoom(){
     if(interactTarget.k==='counter') drawText('!', ox+ROOM.w/2+14, oy+30, '#f5c542', 2);
     else if(interactTarget.k==='exitDoor') drawText('!', ox+ROOM.w/2+14, oy+ROOM.h-20, '#f5c542', 2);
   }
+  if(equipHudOn && !talking) drawEquipHUD();
+  drawJoystick();
+  drawCharPortrait();
   drawHUD();
   blitToScreen();
 }
@@ -4547,7 +4550,7 @@ function enterShop(){
        document.getElementById('colWrap').classList.add('hidden');
        closeChar(); }catch(e){}
   centerRoomCam();
-  sfxEquip(); toastMsg('进入商店');
+  sfxEquip();
 }
 function exitShop(){
   if(!inShop) return;
