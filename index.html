@@ -1190,7 +1190,7 @@ let townData=null;
 const RIVER_CEN=(y)=> 78 + Math.sin(y*0.055)*9 + Math.sin(y*0.017+2.0)*5;
 const ROAD_BASE_Y=76;
 const BRIDGE_HALF_W=3;      // 桥半宽（格）
-const BRIDGE_HALF_H=2;
+const BRIDGE_HALF_H=1;
 function roadYAt(x){
   const wob=Math.sin(x*0.06)*6 + Math.sin(x*0.021+1.2)*9;
   return Math.round(ROAD_BASE_Y + wob);
@@ -1232,6 +1232,15 @@ function buildForestWorld(){
     if(y>topEdge && x<rightEdge) water[y*FW+x]=1;
   }
 
+  // 3b) 填平河与湖之间的缺口（右下连成一片）
+  for(let y=96;y<FH;y++){
+    const rc=Math.round(RIVER_CEN(y))+4;
+    for(let x=0;x<rc && x<FW;x++){
+      if(y>110 || x<78){
+        if(w[y][x]===0) water[y*FW+x]=1;
+      }
+    }
+  }
   // 4) 桥：路面在桥段强制拉直对齐
   const bcx=Math.round(RIVER_CEN(ROAD_BASE_Y));
   // 4a) 先把桥两侧的路压平到 ROAD_BASE_Y
@@ -1290,7 +1299,15 @@ function buildForestWorld(){
   roadMask=new Uint8Array(MW*MH);
   for(let ty=0;ty<FH;ty++) for(let tx=0;tx<FW;tx++){
     const isWater=water[ty*FW+tx]>0, isRoad=road[ty*FW+tx]>0;
-    if(isWater){ for(let j=0;j<8;j++) for(let i=0;i<8;i++) waterMask[(ty*8+j)*MW+(tx*8+i)]=1; }
+    if(isWater){
+      const nb = (ty>0?water[(ty-1)*FW+tx]:1) && (ty<FH-1?water[(ty+1)*FW+tx]:1)
+              && (tx>0?water[ty*FW+tx-1]:1) && (tx<FW-1?water[ty*FW+tx+1]:1);
+      for(let j=0;j<8;j++) for(let i=0;i<8;i++){
+        const edge=(i===0||i===7||j===0||j===7);
+        const jitter=(hash(tx*8+i+77, ty*8+j+31)-0.5)*2;
+        if(!edge || nb || jitter>0.25) waterMask[(ty*8+j)*MW+(tx*8+i)]=1;
+      }
+    }
     if(isRoad){
       for(let j=0;j<8;j++) for(let i=0;i<8;i++){
         const edge=(i===0||i===7||j===0||j===7);
@@ -2186,7 +2203,7 @@ function drawForestWall(sx,sy,tx,ty){
 }
 function drawForestBridge(){
   const info=(typeof window!=='undefined'&&window.__FOREST_BRIDGE)||{x:Math.round(RIVER_CEN(76)),y:76,hw:3,hh:2};
-  const b={ x:(info.x-info.hw-0.5)*TILE, y:(info.y-info.hh-0.5)*TILE, w:(info.hw*2+1)*TILE, h:(info.hh*2+1)*TILE };
+  const b={ x:(info.x-info.hw-1)*TILE, y:(info.y-1)*TILE, w:(info.hw*2+3)*TILE, h:3*TILE };
   const x=b.x-camX, y=b.y-camY, w=b.w, h=b.h;
   if(x>VW+40 || x+w<-40) return;
   px(x, y, w, h, '#9a7248');
