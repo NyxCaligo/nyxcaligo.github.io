@@ -1132,6 +1132,12 @@ function update(dt){
       if(keys['s']||keys['arrowdown']) mvy+=1;
     }
   }
+  if(Math.abs(pvx)>0.5||Math.abs(pvy)>0.5){
+    tryMove(pvx*dt, pvy*dt);
+    pvx*=Math.pow(0.0008,dt); pvy*=Math.pow(0.0008,dt);
+    if(Math.abs(pvx)<3) pvx=0;
+    if(Math.abs(pvy)<3) pvy=0;
+  }
   const mag=Math.hypot(mvx,mvy);
   if(mag>0){
     tryMove(mvx/mag*player.speed*dt, mvy/mag*player.speed*dt);
@@ -2583,7 +2589,7 @@ const ARMOR_SVG=[
 const CRIT_MULT=1.7;
 const ITEMS={
   woodsword:{n:'木剑', t:'weapon', ic:'woodsword', sub:'近战武器', sell:20,
-             desc:'基础的武器。', dmg:5, rate:1.8, crit:4, critMult:CRIT_MULT},
+             desc:'基础的武器。', dmg:5, rate:1.8, crit:4, critMult:CRIT_MULT, kb:1},
   wood:{n:'木头', t:'mat', ic:'wood', desc:'最基础的材料。', sell:2},
   woodhelm:{n:'木头盔', t:'armor', ic:'helm', sub:'防具', slot:'helm', desc:'基础的防具。', armor:1, set:'wood', sell:12},
   woodchest:{n:'木胸甲', t:'armor', ic:'chest', sub:'防具', slot:'chest', desc:'基础的防具。', armor:1, set:'wood', sell:18},
@@ -4474,17 +4480,19 @@ function doAttack(){
     if(Math.hypot(dx,dy)<36 && (dx*player.face)>=-8) hitDummy();
   }
   {
-    let target=null, best=1e9;
+    const it2=ITEMS[wid]||{};
+    const wkb=it2.kb!=null?it2.kb:1;
+    const hits=[];
     for(const sl of slimes){
       const sdx=sl.x-player.x, sdy=sl.y-player.y;
       const sd=Math.hypot(sdx,sdy);
-      if(sd<36 && (sdx*player.face)>=-8 && sd<best){ best=sd; target=sl; }
+      if(sd<36 && (sdx*player.face)>=-8) hits.push({sl, sd});
     }
-    if(target){
-      const it2=ITEMS[wid]||{};
+    hits.sort((a,b)=>a.sd-b.sd);
+    for(const h of hits.slice(0,5)){
       const crit2=Math.random()*100<(it2.crit||4);
       const dmg2=Math.max(1, Math.round((it2.dmg||5)*(crit2?(it2.critMult||1.7):1)));
-      hitSlime(target, dmg2, crit2);
+      hitSlime(h.sl, dmg2, crit2, wkb);
     }
   }
 }
@@ -4509,6 +4517,8 @@ function newSlime(x,y){
           side:Math.random()<0.5?1:-1, stuck:0};
 }
 let playerIframe=0, playerHurt=0, guardTalked=false;
+const PLAYER_WEIGHT=5;
+let pvx=0, pvy=0;
 let dead=false, deathT=0, reviveReady=false;
 const REVIVE_POINT={x:636, y:470};
 function killPlayer(){
@@ -4544,14 +4554,20 @@ function spawnSlime(n){
 }
 function splayerGuardX(x){ return Math.max(20, Math.min(WORLD_W-20, x)); }
 function splayerGuardY(y){ return Math.max(20, Math.min(WORLD_H-20, y)); }
-function hitSlime(s, dmg, crit){
+// 击退公式：攻击方击退值 vs 被击退方重量，收益递减，不会夸张
+function knockbackForce(kb, weight){
+  const k=Math.max(0, kb||0), w=Math.max(1, weight||1);
+  return Math.min(180, 80*k/(k+w));
+}
+function hitSlime(s, dmg, crit, kb){
   if(!s || s.iframe>0) return;
   s.iframe=0.4; s.hitFlash=0.2;
   s.hp-=dmg;
   addDmgNum(s.x, s.y-18, dmg, crit);
   spawnHitSpark(s.x, s.y-8);
   const dx=s.x-player.x, dy=s.y-player.y, d=Math.hypot(dx,dy)||1;
-  s.vx=dx/d*90; s.vy=dy/d*90;
+  const force=knockbackForce(kb!=null?kb:1, 1);
+  s.vx=dx/d*force; s.vy=dy/d*force;
   if(s.hp<=0) killSlime(s);
 }
 function killSlime(s){
@@ -4848,6 +4864,11 @@ function updateSlime(dt){
       s.atkCd=1.2; s.atkAnim=0.22;
       if(playerIframe<=0 && player.hp>0 && !godMode){
         player.hp=Math.max(0,player.hp-s.dmg);
+        {
+          const f=knockbackForce(s.dmg*0.5, PLAYER_WEIGHT);
+          const kdx=player.x-s.x, kdy=player.y-s.y, kd=Math.hypot(kdx,kdy)||1;
+          pvx=kdx/kd*f; pvy=kdy/kd*f;
+        }
         playerIframe=0.4; playerHurt=0.32;
         addDmgNum(player.x, player.y-20, s.dmg, false);
         vibrate(3); sfxHurt();
