@@ -1970,7 +1970,7 @@ function render(){
     octx.fillStyle='#f5e6cf';
     octx.fillText('暂停中', VW/2-12, 17);
   }
-  if(state==='city'){ if(equipHudOn && !talking){ drawEquipHUD(); drawEquipNames(); } drawJoystick(); drawCoinHud(); }
+  if(state==='city'){ if(equipHudOn && !talking) drawEquipHUD(); drawJoystick(); drawCoinHud(); }
 
   blitToScreen();
 }
@@ -2880,8 +2880,15 @@ function renderBag(){
 function renderEquipPanel(){
   const mk=(t,i,empty)=>{
     const d=document.createElement('div'); d.className='eq-slot';
+    d.style.position='relative';
     const cur=equipArr(t)[i];
-    if(cur){ d.appendChild(itemCanvas(cur,30)); d.title=ITEMS[cur].n; }
+    if(cur){
+      d.appendChild(itemCanvas(cur,30));
+      const nm=document.createElement('span');
+      nm.textContent=ITEMS[cur].n;
+      nm.style.cssText='position:absolute;left:0;right:0;bottom:-1px;font-size:8px;line-height:9px;text-align:center;color:#dbeafe;background:rgba(11,15,26,.85);overflow:hidden;white-space:nowrap';
+      d.appendChild(nm);
+    }
     else if(empty){ d.innerHTML=empty; }
     if(cur) bindItemSlot(d,
       ()=>showItemMenu(cur, [
