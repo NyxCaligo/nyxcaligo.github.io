@@ -4504,7 +4504,8 @@ let slimes=[];
 let godMode=false;
 function newSlime(x,y){
   return {x, y, hp:20, maxHp:20, dmg:4, r:10, vx:0, vy:0,
-          iframe:0, atkCd:1, hitFlash:0, atkAnim:0, wob:Math.random()*6, face:1};
+          iframe:0, atkCd:1, hitFlash:0, atkAnim:0, wob:Math.random()*6, face:1,
+          side:Math.random()<0.5?1:-1, stuck:0};
 }
 let playerIframe=0, playerHurt=0, guardTalked=false;
 let dead=false, deathT=0, reviveReady=false;
@@ -4809,9 +4810,24 @@ function updateSlime(dt){
     s.vx*=Math.pow(0.001,dt); s.vy*=Math.pow(0.001,dt);
     const speed=52;
     if(dist>14){
-      let nx=s.x+dx/dist*speed*dt, ny=s.y+dy/dist*speed*dt;
-      if(!solidAt(nx,s.y)) s.x=nx;
-      if(!solidAt(s.x,ny)) s.y=ny;
+      const dxn=dx/dist, dyn=dy/dist;
+      const step=speed*dt;
+      const clear=lineClear(s.x, s.y, player.x, player.y);
+      let vx, vy;
+      if(clear){ vx=dxn; vy=dyn; }
+      else {
+        // 被挡住：沿垂直方向贴墙绕行
+        vx=-dyn*s.side; vy=dxn*s.side;
+      }
+      const nx=s.x+vx*step, ny=s.y+vy*step;
+      if(!solidAt(nx,ny)){ s.x=nx; s.y=ny; s.stuck=0; }
+      else {
+        // 该方向也堵住：换边 / 尝试直行
+        s.stuck+=dt;
+        if(s.stuck>0.25){ s.side=-s.side; s.stuck=0; }
+        const ax=s.x+dxn*step, ay=s.y+dyn*step;
+        if(!solidAt(ax,ay)){ s.x=ax; s.y=ay; }
+      }
     }
     if(s.atkCd>0) s.atkCd=Math.max(0,s.atkCd-dt);
     if(dist<16 && s.atkCd<=0){
@@ -4824,6 +4840,40 @@ function updateSlime(dt){
         if(player.hp<=0) killPlayer();
         else saveGame();
       }
+    }
+  }
+  separateSlimes();
+}
+function lineClear(x0,y0,x1,y1){
+  const d=Math.hypot(x1-x0,y1-y0);
+  const n=Math.max(2, Math.round(d/7));
+  for(let i=1;i<n;i++){
+    const t=i/n;
+    if(solidAt(x0+(x1-x0)*t, y0+(y1-y0)*t)) return false;
+  }
+  return true;
+}
+function separateSlimes(){
+  for(let i=0;i<slimes.length;i++){
+    for(let j=i+1;j<slimes.length;j++){
+      const a=slimes[i], b=slimes[j];
+      const dx=b.x-a.x, dy=b.y-a.y;
+      const d=Math.hypot(dx,dy);
+      if(d<1e-4) { a.x-=0.6; b.x+=0.6; continue; }
+      const min=17;
+      if(d<min){
+        const push=(min-d)/2, nx=dx/d, ny=dy/d;
+        if(!solidAt(a.x-nx*push, a.y-ny*push)){ a.x-=nx*push; a.y-=ny*push; }
+        if(!solidAt(b.x+nx*push, b.y+ny*push)){ b.x+=nx*push; b.y+=ny*push; }
+      }
+    }
+  }
+  for(const s of slimes){
+    const dx=s.x-player.x, dy=s.y-player.y;
+    const d=Math.hypot(dx,dy);
+    if(d>1e-4 && d<15){
+      const nx=dx/d, ny=dy/d, push=(15-d);
+      if(!solidAt(s.x+nx*push, s.y+ny*push)){ s.x+=nx*push*0.8; s.y+=ny*push*0.8; }
     }
   }
 }
