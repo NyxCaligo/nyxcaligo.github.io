@@ -810,11 +810,15 @@ function viewSize(){
   const H=Math.round(vv ? vv.height : window.innerHeight);
   return {W,H};
 }
-function resizeIfNeeded(){
+let lastSizeCheck=0;
+function resizeIfNeeded(force){
+  const now=performance.now();
+  if(!force && now-lastSizeCheck<600) return;
+  lastSizeCheck=now;
   const {W,H}=viewSize();
   const d=window.devicePixelRatio||1;
-  if(cv.width!==Math.round(W*d) || cv.height!==Math.round(H*d)) try{ const bt=document.getElementById('buildTag'); if(bt) bt.textContent='构建 '+BUILD+' · STELLAR ECHO'; }catch(e){}
-resize();
+  const tw=Math.round(W*d), th=Math.round(H*d);
+  if(Math.abs(cv.width-tw)>2 || Math.abs(cv.height-th)>2) resize();
 }
 function resize(){
   dpr = window.devicePixelRatio || 1;
@@ -841,8 +845,7 @@ resize();
 window.addEventListener('resize', ()=>{ resize(); checkOrientation(); });
 window.addEventListener('orientationchange', ()=>{ setTimeout(resize, 200); setTimeout(resize, 600); });
 if(window.visualViewport){
-  window.visualViewport.addEventListener('resize', ()=>{ setTimeout(resize, 80); });
-  window.visualViewport.addEventListener('scroll', ()=>{ setTimeout(resize, 120); });
+  window.visualViewport.addEventListener('resize', ()=>{ setTimeout(()=>resizeIfNeeded(true), 240); });
 }
 window.addEventListener('load', ()=>{ resize(); setTimeout(resize, 250); setTimeout(resize, 900); setTimeout(resize, 1800); });
 
@@ -2294,10 +2297,11 @@ function drawEquipHUD(){
       const rate=(ITEMS[EQUIP.weapons[i]].rate||1.8);
       const frac=Math.max(0,Math.min(1, atkCd/rate));
       const hgt=Math.round((L.WS-2)*frac);
+      const top=y+L.WS-1-hgt;
       octx.fillStyle='rgba(6,10,18,.72)';
-      octx.fillRect(x+1, y+1, L.WS-2, hgt);
+      octx.fillRect(x+1, top, L.WS-2, hgt);
       octx.fillStyle='rgba(96,165,250,.85)';
-      octx.fillRect(x+1, y+L.WS-hgt, L.WS-2, 1);
+      octx.fillRect(x+1, top, L.WS-2, 1);
     }
     if(i===heldSlot && EQUIP.weapons[i]){
       px(x-1,y-1,L.WS+2,1,'#f5c542'); px(x-1,y+L.WS,L.WS+2,1,'#f5c542');
@@ -4158,6 +4162,7 @@ document.getElementById('startBtn').onclick=()=>{
   setTimeout(()=>{ sub.classList.add('hidden'); state='city'; resize(); syncBagBtn(); }, 1600);
 };
 
+try{ const bt=document.getElementById('buildTag'); if(bt) bt.textContent='构建 '+BUILD+' · STELLAR ECHO'; }catch(e){}
 buildMini(); resetGame(); loadCfg(); hasSave=loadGame(); syncBagBtn(); last=performance.now(); fpsLast=performance.now(); requestAnimationFrame(frame);
 </script>
 </body>
