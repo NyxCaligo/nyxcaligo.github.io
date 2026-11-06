@@ -528,6 +528,7 @@
     <button id="splitCancel" class="sp-full sp-alt">取消</button>
   </div>
 </div>
+<div id="errBox" style="position:fixed;left:50%;bottom:60px;transform:translateX(-50%);z-index:99;display:none;max-width:86vw;padding:8px 12px;background:rgba(120,20,20,.92);color:#fff;font-size:11px;border:1px solid #f87171"></div>
 <div id="shopWrap" class="modal hidden" style="z-index:20; align-items:flex-start; padding-top:10vh;">
   <div class="modal-bg" id="shopBg"></div>
   <div class="modal-box" style="width:min(330px,86vw); padding:14px">
@@ -1885,6 +1886,18 @@ addEventListener('keydown', e=>{
 addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
 addEventListener('blur', ()=>{ for(const k in keys) keys[k]=false; });
 
+let lastErr='', lastErrAt=0;
+function showFatal(msg){
+  try{
+    const now=performance.now();
+    if(msg===lastErr && now-lastErrAt<3000) return;
+    lastErr=msg; lastErrAt=now;
+    const d=document.getElementById('errBox');
+    if(d){ d.style.display='block'; d.textContent='⚠ '+msg; }
+    try{ localStorage.setItem('xingchen_err', String(msg).slice(0,300)); }catch(e){}
+  }catch(e){}
+}
+window.addEventListener('error', (e)=>{ showFatal(e.message||'unknown'); });
 function frame(now){
   const dt=Math.min((now-last)/1000,0.05); last=now;
   if(!paused) gtime += dt;
@@ -1896,7 +1909,7 @@ function frame(now){
   try{
     if(state==='city' && !paused) update(dt);
     render();
-  }catch(e){}
+  }catch(e){ showFatal((e&&e.message)||'render error'); }
   if((fpsFrames & 31)===0) resizeIfNeeded();
   fpsFrames++;
   if(now-fpsLast>=500){
@@ -3898,8 +3911,11 @@ function drawAmbient(){
       px(sx+9-ph*2, sy+11, 2,1,'#5fa8e6');
     }
   }
-  if(nearNpc){
-    const bx=Math.round(NPC.x-camX), by=Math.round(NPC.y-camY);
+  if(interactTarget && interactTarget.k==='npc'){
+    let tx2=NPC.x, ty2=NPC.y;
+    if(interactTarget.npc==='elder'){ tx2=ELDER.x; ty2=ELDER.y; }
+    else if(interactTarget.npc==='officer'){ tx2=OFFICER.x; ty2=OFFICER.y; }
+    const bx=Math.round(tx2-camX), by=Math.round(ty2-camY);
     octx.strokeStyle='#ffffff'; octx.lineWidth=1;
     octx.strokeRect(bx-8, by-14, 17, 25);
     px(bx-4, by-30, 9, 12, '#0b0f1a');
