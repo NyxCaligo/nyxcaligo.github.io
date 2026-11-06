@@ -549,6 +549,16 @@
 </div>
 <button id="reviveBtn" class="hidden">复活</button>
 <div id="errBox" style="position:fixed;left:50%;bottom:60px;transform:translateX(-50%);z-index:99;display:none;max-width:86vw;padding:8px 12px;background:rgba(120,20,20,.92);color:#fff;font-size:11px;border:1px solid #f87171"></div>
+<div id="mobWrap" class="modal hidden" style="z-index:15; align-items:flex-start; padding-top:8vh;">
+  <div class="modal-bg" id="mobBg"></div>
+  <div class="modal-box" style="width:min(280px,80vw); padding:14px">
+    <div class="panel-head">
+      <span class="pixlabel" id="mobTitle"></span>
+      <button class="xBtn" id="mobClose">✕</button>
+    </div>
+    <div id="mobBody" style="width:100%"></div>
+  </div>
+</div>
 <div id="shopWrap" class="modal hidden" style="z-index:20; align-items:flex-start; padding-top:3vh;">
   <div class="modal-bg" id="shopBg"></div>
   <div class="modal-box" style="width:min(330px,86vw); padding:12px; max-height:88vh; overflow:auto; background:linear-gradient(180deg,#5a3f28,#3a2818);border:2px solid #2b1c10;box-shadow:inset 0 2px 0 #7a5636, 0 6px 0 #1a120a, 0 0 18px rgba(0,0,0,.5)">
@@ -2290,6 +2300,7 @@ function collectSave(){
     bag:bagItems.map(e=>[e.id,e.n]),
     story:{ talked: storyTalked, shop: shopTalked, officer: officerTalked },
     seen:[...seenItems],
+    mobs:[...seenMobs],
     eq:{ weapons:EQUIP.weapons.slice(), armors:EQUIP.armors.slice(), accessories:EQUIP.accessories.slice() } };
 }
 function applySave(s){
@@ -2321,6 +2332,7 @@ function applySave(s){
   }
   if(s.story){ storyTalked=!!s.story.talked; shopTalked=!!s.story.shop; officerTalked=!!s.story.officer; }
   if(Array.isArray(s.seen)) seenItems=new Set(s.seen.filter(id=>ITEMS[id]));
+  if(Array.isArray(s.mobs)) seenMobs=new Set(s.mobs.filter(m=>MOBS[m]));
   if(s.eq){
     const fix=(arr,n)=>{ const out=new Array(n).fill(null);
       if(Array.isArray(arr)) for(let i=0;i<n;i++){ const v=arr[i]; if(v && ITEMS[v]) out[i]=v; }
@@ -2924,6 +2936,7 @@ function detailRows(id){
   if(it.rate!=null) rows.push(['频率', it.rate+' 秒/次']);
   if(it.crit!=null) rows.push(['暴击率', it.crit+'%']);
   if(it.critMult!=null) rows.push(['暴击伤害', it.critMult+' 倍']);
+  if(it.kb!=null) rows.push(['击退', String(it.kb)]);
   if(it.armor!=null) rows.push(['护甲值', String(it.armor)]);
   if(it.fx) rows.push(['特殊效果', it.fx]);
   if(it.set && SETS[it.set]){
@@ -3007,8 +3020,13 @@ function bindCatBtns(){
   });
 }
 function ph(n){ const a=[]; for(let i=0;i<n;i++) a.push({n:''}); return a; }
+const MOBS={
+  slime:{n:'史莱姆', hp:20, armor:0, dmg:4, xp:8, coin:'1~4 铜币', speed:52, kb:2, weight:1,
+         drops:['铜币','经验球'], desc:'会锁定目标的绿色黏液，靠近后会扑咬。'}
+};
+let seenMobs=new Set();
 const COLLECTION={
-  mob:ph(40),
+  mob:[{mob:'slime'}].concat(ph(39)),
   weapon:[{id:'woodsword'}].concat(ph(39)),
   armor:[{id:'woodhelm'},{id:'woodchest'},{id:'woodlegs'}].concat(ph(37)),
   acc:ph(40)
@@ -3027,7 +3045,24 @@ function renderCollection(){
   document.getElementById('colTitle').textContent = colTab==='mob' ? '生物图鉴' : '装备图鉴';
   for(const e of list){
     const d=document.createElement('div'); d.className='col-slot';
-    const unlocked = e.id ? itemUnlocked(e.id) : false;
+    const unlocked = e.mob ? seenMobs.has(e.mob) : (e.id ? itemUnlocked(e.id) : false);
+    if(e.mob && unlocked){
+      const d2=document.createElement('div'); d2.className='col-slot';
+      const cv=document.createElement('img');
+      cv.src=SLIME_ART; cv.style.cssText='width:34px;height:34px;image-rendering:pixelated;';
+      d2.appendChild(cv);
+      const nm=document.createElement('span'); nm.className='cname'; nm.textContent=MOBS[e.mob].n;
+      d2.appendChild(nm);
+      bindItemSlot(d2, ()=>openMobDetail(e.mob), ()=>openMobDetail(e.mob));
+      g.appendChild(d2);
+      continue;
+    }
+    if(e.mob && !unlocked){
+      d.classList.add('lock');
+      const q=document.createElement('span'); q.className='qmark'; q.textContent='?'; d.appendChild(q);
+      g.appendChild(d);
+      continue;
+    }
     if(unlocked){
       const cv=itemCanvas(e.id, 34);
       cv.style.cssText='width:34px;height:34px;image-rendering:pixelated;';
@@ -3181,6 +3216,7 @@ function renderChar(){
     ['货币', fmtMoney(money)],
     ['法力值', Math.floor(player.mp||0)+' / '+(player.maxMp||30)],
     ['回蓝速度', '0.25 / 秒（每 4 秒 1 点）'],
+    ['受击退值', String(PLAYER_WEIGHT)],
     ['护甲值', sb.armor+(sb.bonus?' + '+sb.bonus+'（套装）':'')+' = '+sb.total],
   ];
   for(const [k,v] of rows){
@@ -4550,7 +4586,10 @@ function spawnSlime(n){
     const sx=OFFICER.x-30+(Math.random()*26-13), sy=OFFICER.y+26+(Math.random()*20-10);
     slimes.push(newSlime(splayerGuardX(sx), splayerGuardY(sy)));
   }
-  if(slimes.length) { toastMsg(cnt>1?('出现了 '+cnt+' 只史莱姆！'):'一只史莱姆出现了！'); sfxCrit(); }
+  if(slimes.length){
+    seenMobs.add('slime');
+    toastMsg(cnt>1?('出现了 '+cnt+' 只史莱姆！'):'一只史莱姆出现了！'); sfxCrit();
+  }
 }
 function splayerGuardX(x){ return Math.max(20, Math.min(WORLD_W-20, x)); }
 function splayerGuardY(y){ return Math.max(20, Math.min(WORLD_H-20, y)); }
@@ -4574,7 +4613,8 @@ function killSlime(s){
   slimes=slimes.filter(x=>x!==s);
   // 经验球 + 铜币（爆发）
   for(let i=0;i<2;i++) orbs.push({kind:'xp', x:s.x, y:s.y-6, vx:(Math.random()*2-1)*70, vy:-Math.random()*70-30, life:14, val:4});
-  for(let i=0;i<3;i++) orbs.push({kind:'coin', x:s.x, y:s.y-6, vx:(Math.random()*2-1)*80, vy:-Math.random()*80-30, life:14, val:1});
+  const coinN=1+Math.floor(Math.random()*4);
+  for(let i=0;i<coinN;i++) orbs.push({kind:'coin', x:s.x, y:s.y-6, vx:(Math.random()*2-1)*80, vy:-Math.random()*80-30, life:14, val:1});
   // 尸块
   for(let i=0;i<5;i++){
     const a=Math.random()*Math.PI*2;
@@ -5145,6 +5185,38 @@ function buildShopGrid(){
   bindShopScroll();
   setTimeout(()=>{ shopScrollSet(0); shopScrollUpdate(); }, 30);
 }
+function openMobDetail(key){
+  const m=MOBS[key]; if(!m) return;
+  document.getElementById('mobTitle').textContent=m.n;
+  const body=document.getElementById('mobBody');
+  body.innerHTML='';
+  const cv=document.createElement('img');
+  cv.src=SLIME_ART; cv.style.cssText='width:54px;height:54px;image-rendering:pixelated;display:block;margin:0 auto 6px';
+  body.appendChild(cv);
+  const rows=[
+    ['生命值', String(m.hp)],
+    ['护甲值', String(m.armor)],
+    ['攻击伤害', String(m.dmg)],
+    ['击杀经验', String(m.xp)],
+    ['掉落物', m.coin+'、'+m.drops.join('、')],
+    ['移动速度', String(m.speed)],
+    ['攻击击退', String(m.kb)],
+    ['受击退（重量）', String(m.weight)]
+  ];
+  for(const [k,v] of rows){
+    const d=document.createElement('div'); d.className='detail-row';
+    d.innerHTML='<span>'+k+'</span><b>'+v+'</b>';
+    body.appendChild(d);
+  }
+  const de=document.createElement('div');
+  de.style.cssText='font-size:11px;color:#8fb3d9;margin-top:6px;text-align:center';
+  de.textContent=m.desc;
+  body.appendChild(de);
+  document.getElementById('mobWrap').classList.remove('hidden');
+  sfxBeep();
+}
+document.getElementById('mobClose').onclick=()=>document.getElementById('mobWrap').classList.add('hidden');
+document.getElementById('mobBg').onclick=()=>document.getElementById('mobWrap').classList.add('hidden');
 function renderShopMoney(){
   const el=document.getElementById('shopMoney');
   if(el) el.textContent=fmtMoney(money);
