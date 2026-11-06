@@ -1886,6 +1886,7 @@ addEventListener('keydown', e=>{
 addEventListener('keyup', e=>{ keys[e.key.toLowerCase()]=false; });
 addEventListener('blur', ()=>{ for(const k in keys) keys[k]=false; });
 
+let errStreak=0;
 let lastErr='', lastErrAt=0;
 function showFatal(msg){
   try{
@@ -1909,7 +1910,13 @@ function frame(now){
   try{
     if(state==='city' && !paused) update(dt);
     render();
-  }catch(e){ showFatal((e&&e.message)||'render error'); }
+  }catch(e){
+    showFatal((e&&e.message)||'render error');
+    errStreak++;
+    if(errStreak>8 && inShop){ try{ inShop=false; if(townPos){ player.x=townPos.x; player.y=townPos.y+12; } }catch(e2){} errStreak=0; }
+    if(errStreak>20){ try{ location.reload(); }catch(e3){} }
+  }
+  if(!inShop) errStreak=Math.max(0,errStreak-1);
   if((fpsFrames & 31)===0) resizeIfNeeded();
   fpsFrames++;
   if(now-fpsLast>=500){
@@ -4428,6 +4435,9 @@ function exitShop(){
   sfxEquip();
 }
 function updateShop(dt){
+  // 自愈：保证玩家一定在房间内，避免“进去后看不到人”
+  if(!(player.x>18 && player.x<ROOM.w-18)) player.x=ROOM.w/2;
+  if(!(player.y>22 && player.y<ROOM.h-14)) player.y=ROOM.h-24;
   let mvx=0, mvy=0;
   if(!talking){
     if(joy.active && Math.hypot(joy.dx,joy.dy)>2){ mvx=joy.dx; mvy=joy.dy; }
