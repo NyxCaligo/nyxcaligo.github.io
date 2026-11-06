@@ -5854,15 +5854,21 @@ function drawSlime(SLIME){
     octx.fillRect(bx-1, byy, w+2, h+1);
     octx.globalAlpha=1;
   }
-  // 血条
+  // 血条（绿→黄→红 平滑渐变，低血量保持高亮度）
   const bw=20, hx=Math.round(cx-bw/2), hy=Math.round(byy-7);
-  octx.fillStyle='rgba(11,15,26,.75)'; octx.fillRect(hx-1, hy-1, bw+2, 5);
-  octx.fillStyle='#3d1418'; octx.fillRect(hx, hy, bw, 3);
+  octx.fillStyle='rgba(11,15,26,.78)'; octx.fillRect(hx-1, hy-1, bw+2, 5);
+  octx.fillStyle='#1c2129'; octx.fillRect(hx, hy, bw, 3);
   {
     const r=Math.max(0, Math.min(1, SLIME.hp/SLIME.maxHp));
-    const col = r>0.6 ? '#4ade80' : r>0.3 ? '#f5c542' : '#7f1d1d';
-    octx.fillStyle=col;
-    octx.fillRect(hx, hy, Math.max(0, Math.round(bw*r)), 3);
+    const hue=Math.round(120*r);
+    const lig=Math.round(48 + (1-r)*12);
+    const wpx=Math.max(0, Math.round(bw*r));
+    if(wpx>0){
+      octx.fillStyle='hsl('+hue+',82%,'+lig+'%)';
+      octx.fillRect(hx, hy, wpx, 3);
+      octx.fillStyle='hsla('+hue+',95%,82%,.75)';
+      octx.fillRect(hx, hy, wpx, 1);
+    }
   }
 }
 function drawOrbs(){
