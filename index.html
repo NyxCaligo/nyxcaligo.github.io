@@ -2083,10 +2083,14 @@ function buildChunk(cx,cy){
         const sx=tx*TILE-x0, sy=ty*TILE-y0, t=world[ty][tx];
         if(mapName==='forest'){
           if(t===0){
-            if(tileWaterCnt[ty*WCOLS+tx]>0 || tileRoadCnt[ty*WCOLS+tx]>0){
-              if(tileWaterCnt[ty*WCOLS+tx]>0) drawWaterTile(sx,sy,tx,ty);
-              if(tileRoadCnt[ty*WCOLS+tx]>0) drawGroundTile(sx,sy,tx,ty);
-            } else drawForestGrass(sx,sy,tx,ty);
+            {
+              const wc=tileWaterCnt[ty*WCOLS+tx], rc=tileRoadCnt[ty*WCOLS+tx];
+              if(wc>=63) drawForestWaterFull(sx,sy,tx,ty);
+              else if(wc>0) drawForestWaterEdge(sx,sy,tx,ty);
+              else if(rc>=63) drawForestRoadFull(sx,sy,tx,ty);
+              else if(rc>0) drawForestRoadEdge(sx,sy,tx,ty);
+              else drawForestGrass(sx,sy,tx,ty);
+            }
           } else {
             drawForestWall(sx,sy,tx,ty);
           }
@@ -2105,15 +2109,14 @@ function buildChunk(cx,cy){
 function drawForestGrass(sx,sy,tx,ty){
   const h=hash(tx*2+1,ty*3+7);
   const patch=hash(tx*5+11,ty*7+3);
-  // 随机泥土/菜地小块（低概率，边缘用 3~5px 的碎块过渡）
-  if(patch>0.88){
-    const pw=2+Math.floor(hash(tx*3,ty*5)*2);
+  // 随机小泥斑（2~4px 碎块，不铺满整格）
+  if(patch>0.80){
+    const px0=sx+2+Math.floor(hash(tx*3,ty*5)*10);
+    const py0=sy+2+Math.floor(hash(tx*7,ty*3)*10);
     octx.fillStyle='#6b5432';
-    octx.fillRect(sx+2, sy+3, 12, 9);
+    octx.fillRect(px0, py0, 3+Math.floor(h*2), 2);
     octx.fillStyle='#7d6440';
-    octx.fillRect(sx+3, sy+4, 10, 3);
-    octx.fillStyle='#5a4529';
-    octx.fillRect(sx+3+Math.floor(h*6), sy+9, 4, 2);
+    octx.fillRect(px0+1, py0, 2, 1);
   }
   const base = h<0.22 ? '#4f8f3a' : (h<0.62 ? '#569a40' : (h<0.86 ? '#5da648' : '#63ad4d'));
   octx.fillStyle=base; octx.fillRect(sx,sy,TILE,TILE);
@@ -2192,6 +2195,41 @@ function drawForestBridge(){
   px(x, y, 3, h, '#6b4a2e');
   px(x+w-3, y, 3, h, '#6b4a2e');
   for(let yy=y+6; yy<y+h; yy+=16){ px(x, yy, 3, 3, '#5a3a1f'); px(x+w-3, yy, 3, 3, '#5a3a1f'); }
+}
+function drawForestWaterFull(sx,sy,tx,ty){
+  octx.fillStyle='#2f6fb0'; octx.fillRect(sx,sy,TILE,TILE);
+  octx.fillStyle='#357cbf'; octx.fillRect(sx,sy,TILE,2);
+  const h=hash(tx*3+1,ty*5+2);
+  octx.fillStyle='#4a8fd4';
+  if(h>0.5){ octx.fillRect(sx+3,sy+6,5,1); octx.fillRect(sx+9,sy+12,4,1); }
+  else { octx.fillRect(sx+5,sy+9,6,1); }
+}
+function drawForestWaterEdge(sx,sy,tx,ty){
+  drawForestGrass(sx,sy,tx,ty);
+  for(let j=0;j<8;j++) for(let i=0;i<8;i++){
+    if(waterMask[(ty*8+j)*MW+(tx*8+i)]){
+      const deep = (i>0&&i<7&&j>0&&j<7);
+      px(sx+i*2, sy+j*2, 2, 2, deep?'#2f6fb0':'#4a90cf');
+    }
+  }
+}
+function drawForestRoadFull(sx,sy,tx,ty){
+  const h=hash(tx*5+2,ty*7+3);
+  octx.fillStyle = h<0.5 ? '#8a6b45' : '#96774d';
+  octx.fillRect(sx,sy,TILE,TILE);
+  octx.fillStyle='#7b5e3c';
+  if(h>0.62) octx.fillRect(sx+3,sy+6,3,2);
+  octx.fillStyle='#a2875c';
+  if(h<0.3) octx.fillRect(sx+9,sy+4,2,2);
+}
+function drawForestRoadEdge(sx,sy,tx,ty){
+  drawForestGrass(sx,sy,tx,ty);
+  for(let j=0;j<8;j++) for(let i=0;i<8;i++){
+    if(roadMask[(ty*8+j)*MW+(tx*8+i)]){
+      const hh=hash(tx*8+i, ty*8+j);
+      px(sx+i*2, sy+j*2, 2, 2, hh>0.5?'#96774d':'#8a6b45');
+    }
+  }
 }
 function drawForestWater(sx,sy,tx,ty){
   const cnt=tileWaterCnt[ty*WCOLS+tx];
