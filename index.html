@@ -528,6 +528,16 @@
     <button id="splitCancel" class="sp-full sp-alt">取消</button>
   </div>
 </div>
+<div id="statsWrap" class="modal hidden" style="z-index:19; align-items:flex-start; padding-top:8vh;">
+  <div class="modal-bg" id="statsBg"></div>
+  <div class="modal-box" style="width:min(320px,84vw); padding:14px">
+    <div class="panel-head">
+      <span class="pixlabel" id="statsTitle"></span>
+      <button class="xBtn" id="statsClose">✕</button>
+    </div>
+    <div id="statsBody" style="width:100%"></div>
+  </div>
+</div>
 <div id="noticeWrap" class="modal hidden" style="z-index:18; align-items:flex-start; padding-top:8vh;">
   <div class="modal-bg" id="noticeBg"></div>
   <div class="modal-box" style="width:min(330px,86vw); padding:16px">
@@ -725,6 +735,7 @@
     <div class="sp-label">数据</div>
     <div class="sp-group">
       <button id="openRedeem" class="sp-full sp-alt">兑换码</button>
+      <button id="openStats" class="sp-full sp-alt">游玩统计</button>
       <button id="openSave" class="sp-full sp-alt">存档</button>
       <div id="buildTag" style="font-size:10px;color:#5b7089;text-align:center;padding:4px 0"></div>
     </div>
@@ -961,6 +972,7 @@ let state='menu', last=0;
 let camX=0, camY=0, camXs=0, camYs=0, walkPhase=0;
 let player = { x:680, y:448, hp:100, maxHp:100, r:6, speed:120, face:1 };
 const BUILD='v1.0-M1';
+let sessionSec=0;
 let level=0, xp=0, xpNeed=100;
 function nextXpNeed(cur){ return Math.max(1, Math.round((cur||100)*1.07)); }
 
@@ -1795,6 +1807,11 @@ addEventListener('blur', ()=>{ for(const k in keys) keys[k]=false; });
 function frame(now){
   const dt=Math.min((now-last)/1000,0.05); last=now;
   if(!paused) gtime += dt;
+  if(state==='city' && !paused){
+    sessionSec += dt; stats.totalSec += dt; statPlayAcc += dt; statHitAcc += dt;
+    if(gtime - statsFlushAt > 10){ statsFlushAt=gtime; saveStats(); }
+    if(statHitAcc >= 60){ statHitAcc=0; statHit('playtime'); }
+  }
   try{
     if(state==='city' && !paused) update(dt);
     render();
@@ -3275,6 +3292,68 @@ function syncDevUI(){
   if(g) g.style.display = devMode?'':'none';
   if(devMode) renderDevItems();
 }
+// ---------- 游玩统计 ----------
+const STAT_NS='nyxcaligo-stellar-echo';
+const STAT_KEY='xingchen_stats_v1';
+let stats={sessions:0, totalSec:0, firstAt:0};
+let statsFlushAt=0, statRemote={visits:null, playtime:null, ok:false}, statPlayAcc=0, statHitAcc=0;
+function loadStats(){
+  try{
+    const raw=localStorage.getItem(STAT_KEY);
+    if(raw){ const o=JSON.parse(raw); stats.sessions=o.sessions||0; stats.totalSec=o.totalSec||0; stats.firstAt=o.firstAt||0; }
+  }catch(e){}
+}
+function saveStats(){ try{ localStorage.setItem(STAT_KEY, JSON.stringify(stats)); }catch(e){} }
+function statFetch(path, cb){
+  const done=(v)=>{ try{ if(typeof cb==='function') cb(v); }catch(e){} };
+  try{
+    const ctl=new AbortController();
+    const t=setTimeout(()=>{ try{ctl.abort();}catch(e){} }, 5000);
+    fetch('https://abacus.jasoncameron.dev/'+path, {signal:ctl.signal})
+      .then(r=>r.json()).then(d=>{ clearTimeout(t); done(d&&d.value); })
+      .catch(()=>{ clearTimeout(t); done(null); });
+  }catch(e){ done(null); }
+}
+function statHit(key, cb){ statFetch('hit/'+STAT_NS+'/'+key, cb); }
+function statGet(key, cb){ statFetch('get/'+STAT_NS+'/'+key, cb); }
+function fmtDur(sec){
+  sec=Math.max(0, Math.round(sec));
+  const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s2=sec%60;
+  if(h>0) return h+' 小时 '+m+' 分';
+  if(m>0) return m+' 分 '+s2+' 秒';
+  return s2+' 秒';
+}
+function renderStats(){
+  const body=document.getElementById('statsBody');
+  if(!body) return;
+  body.innerHTML='';
+  const rows=[
+    ['本次游玩', fmtDur(sessionSec)],
+    ['本机累计', fmtDur(stats.totalSec)],
+    ['启动次数', stats.sessions+' 次'],
+    ['首次游玩', stats.firstAt? new Date(stats.firstAt).toLocaleString('zh-CN'):'—'],
+    ['', ''],
+    ['全服访问', statRemote.visits!=null? statRemote.visits+' 次':'读取中/不可用'],
+    ['全服游玩', statRemote.playtime!=null? statRemote.playtime+' 分钟':'读取中/不可用'],
+  ];
+  for(const [k,v] of rows){
+    if(!k){ const sp=document.createElement('div'); sp.style.height='8px'; body.appendChild(sp); continue; }
+    const d=document.createElement('div');
+    d.style.cssText='display:flex;justify-content:space-between;font-size:12px;padding:6px 2px;border-bottom:1px dashed #2f5a8a;color:#cfe3f8';
+    d.innerHTML='<span>'+k+'</span><b style="color:#f5c542;font-weight:normal">'+v+'</b>';
+    body.appendChild(d);
+  }
+}
+document.getElementById('openStats').onclick=()=>{
+  document.getElementById('statsTitle').textContent='游玩统计';
+  document.getElementById('statsWrap').classList.remove('hidden');
+  renderStats();
+  statGet('visits', v=>{ statRemote.visits=v; renderStats(); });
+  statGet('playtime', v=>{ statRemote.playtime=v; renderStats(); });
+  sfxBeep();
+};
+document.getElementById('statsClose').onclick=()=>document.getElementById('statsWrap').classList.add('hidden');
+document.getElementById('statsBg').onclick=()=>document.getElementById('statsWrap').classList.add('hidden');
 document.getElementById('openNotice').onclick=()=>{
   document.getElementById('noticeTitle').textContent='内测公告';
   const body=document.getElementById('noticeBody');
@@ -4163,7 +4242,11 @@ document.getElementById('startBtn').onclick=()=>{
 };
 
 try{ const bt=document.getElementById('buildTag'); if(bt) bt.textContent='构建 '+BUILD+' · STELLAR ECHO'; }catch(e){}
-buildMini(); resetGame(); loadCfg(); hasSave=loadGame(); syncBagBtn(); last=performance.now(); fpsLast=performance.now(); requestAnimationFrame(frame);
+buildMini(); resetGame(); loadCfg(); hasSave=loadGame(); syncBagBtn();
+loadStats();
+stats.sessions++; if(!stats.firstAt) stats.firstAt=Date.now(); saveStats();
+statHit('visits');
+setInterval(()=>{ saveStats(); }, 20000); last=performance.now(); fpsLast=performance.now(); requestAnimationFrame(frame);
 </script>
 </body>
 </html>
