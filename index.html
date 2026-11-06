@@ -1666,17 +1666,18 @@ function drawHUD(){
   }
 }
 
+function drawCoinIcon(cx,cy,glow){
+  if(glow){ octx.globalAlpha=0.35*glow; octx.fillStyle='#fbbf24'; octx.fillRect(cx-4,cy-4,8,8); octx.globalAlpha=1; }
+  px(cx-2, cy-1, 5, 3, '#b45309');
+  px(cx-1, cy-2, 3, 4, '#f59e0b');
+  px(cx-1, cy-2, 1, 1, '#fde68a');
+}
 function drawCoinHud(){
-  const x=Math.max(6, JBX-JR-2), y=JBY+JR+8;
-  // 橙色铜币
-  const cx=x+4, cy=y+3;
-  octx.fillStyle='#7a3d0a';
-  octx.beginPath(); octx.arc(cx,cy,4.5,0,7); octx.fill();
-  octx.fillStyle='#f59e0b';
-  octx.beginPath(); octx.arc(cx,cy,3.5,0,7); octx.fill();
-  octx.fillStyle='#fde68a';
-  octx.beginPath(); octx.arc(cx-1,cy-1,1.4,0,7); octx.fill();
-  drawText(String(Math.floor(money)), x+11, y, '#fde68a', 1.4);
+  const y=VH-12;
+  const x=10;
+  const tw=Math.abs(Math.sin(gtime*3.2));
+  drawCoinIcon(x+4, y+3, tw);
+  drawText(String(Math.floor(money)), x+11, y, tw>0.7?'#fff7d6':'#fde68a', 1.4);
 }
 function drawJoystick(){
   const S=JR*2, x=Math.round(JBX-S/2), y=Math.round(JBY-S/2);
@@ -4368,6 +4369,42 @@ document.getElementById('dlgBox').onclick=()=>{
 // ---------- 攻击 ----------
 const ATK_DUR=0.34;
 let attacking=0, heldSlot=0, atkCd=0;
+function sfxXp(){
+  if(!actx||!sfxOn||mutedAll) return;
+  const t=actx.currentTime;
+  [[880,0],[1180,0.06]].forEach(([f,d])=>{
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(f,t+d);
+    g.gain.setValueAtTime(0.0001,t+d);
+    g.gain.linearRampToValueAtTime(0.09,t+d+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+d+0.12);
+    o.connect(g); g.connect(sfxGain); o.start(t+d); o.stop(t+d+0.14);
+  });
+}
+function sfxCoin(){
+  if(!actx||!sfxOn||mutedAll) return;
+  const t=actx.currentTime;
+  [[1568,0],[2093,0.045]].forEach(([f,d])=>{
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type='square'; o.frequency.setValueAtTime(f,t+d);
+    g.gain.setValueAtTime(0.0001,t+d);
+    g.gain.linearRampToValueAtTime(0.06,t+d+0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+d+0.09);
+    o.connect(g); g.connect(sfxGain); o.start(t+d); o.stop(t+d+0.11);
+  });
+}
+function sfxHurt(){
+  if(!actx||!sfxOn||mutedAll) return;
+  const t=actx.currentTime;
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.type='sawtooth';
+  o.frequency.setValueAtTime(180,t);
+  o.frequency.exponentialRampToValueAtTime(60,t+0.18);
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime(0.13,t+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+0.22);
+  o.connect(g); g.connect(sfxGain); o.start(t); o.stop(t+0.24);
+}
 function sfxCrit(){
   if(!actx||!sfxOn||mutedAll) return;
   const t=actx.currentTime;
@@ -4686,7 +4723,7 @@ function updateSlime(dt){
       player.hp=Math.max(0,player.hp-SLIME.dmg);
       playerIframe=0.4; playerHurt=0.32;
       addDmgNum(player.x, player.y-20, SLIME.dmg, false);
-      vibrate(3); sfxHit();
+      vibrate(3); sfxHurt();
       saveGame();
     }
   }
@@ -4700,9 +4737,9 @@ function updateOrbs(dt){
     o.vx*=Math.pow(0.12,dt); o.vy*=Math.pow(0.12,dt);
     o.x+=o.vx*dt; o.y+=o.vy*dt;
     if(d<8){
-      if(o.kind==='xp') gainXp(o.val||4);
-      else { money+=(o.val||1); }
-      orbs.splice(i,1); sfxBeep();
+      if(o.kind==='xp'){ gainXp(o.val||4); sfxXp(); }
+      else { money+=(o.val||1); sfxCoin(); }
+      orbs.splice(i,1);
       continue;
     }
     if(o.life<=0) orbs.splice(i,1);
@@ -4943,31 +4980,52 @@ function hitDummy(){
 }
 function drawSlime(){
   if(!SLIME.alive) return;
-  if(!slimeImg){ slimeImg=new Image(); slimeImg.src=SLIME_ART; return; }
-  const sq=Math.sin(SLIME.wob)*0.10 + (SLIME.atkAnim>0?0.18:0);
-  const w=22*(1+sq), h=22*(1-sq*0.8);
+  const sq=Math.sin(SLIME.wob)*0.10 + (SLIME.atkAnim>0?0.16:0);
+  const w=Math.round(13*(1+sq)), h=Math.round(12*(1-sq*0.85));
   const cx=SLIME.x-camX, by=SLIME.y-camY;
   // 影子
-  octx.globalAlpha=0.22; octx.fillStyle='#000';
-  octx.beginPath(); octx.ellipse(cx, by+1, w*0.45, 3.5, 0, 0, 7); octx.fill();
+  octx.globalAlpha=0.20; octx.fillStyle='#000';
+  octx.beginPath(); octx.ellipse(cx, by+1, w*0.5, 2.6, 0, 0, 7); octx.fill();
   octx.globalAlpha=1;
-  octx.save();
-  octx.translate(Math.round(cx*RES)/RES, Math.round(by*RES)/RES);
-  if(SLIME.face<0) octx.scale(-1,1);
-  octx.imageSmoothingEnabled=false;
-  octx.drawImage(slimeImg, -w/2, -h, w, h);
+  const L='#4ea832', M='#6ed24a', D='#8ff06a', HL='#c6ff9e';
+  const bx=Math.round(cx-w/2), byy=Math.round(by-h);
+  // 身体（圆顶 + 底部摊开）
+  for(let i=0;i<h;i++){
+    const t=i/(h-1||1);
+    const ww=Math.round(w*(0.55+0.45*Math.sin((0.25+t*0.75)*Math.PI*0.5)));
+    const x=Math.round(cx-ww/2);
+    px(x, byy+i, ww, 1, i<2?D:(i>h-3?L:M));
+  }
+  // 底部波浪（液滴感）
+  px(bx-1, by-1, 3, 2, L);
+  px(bx+w-2, by-1, 3, 2, L);
+  px(bx+Math.round(w*0.4), by, 2, 1, L);
+  // 描边
+  px(bx-1, byy+1, 1, h-2, L);
+  px(bx+w, byy+1, 1, h-2, L);
+  // 高光
+  px(bx+2, byy+2, 2, 2, HL);
+  px(bx+2, byy+4, 1, 1, HL);
+  px(bx+w-4, byy+3, 2, 1, HL);
+  // 眼睛
+  const ex1=bx+3, ex2=bx+w-5, ey=byy+Math.round(h*0.42);
+  px(ex1, ey, 3, 3, '#1f3d18'); px(ex2, ey, 3, 3, '#1f3d18');
+  px(ex1, ey, 1, 1, '#ffffff'); px(ex2, ey, 1, 1, '#ffffff');
+  // 嘴
+  px(bx+Math.round(w/2)-2, ey+4, 4, 1, '#1f3d18');
+  px(bx+Math.round(w/2)-1, ey+3, 2, 1, '#1f3d18');
+  // 受击闪白
   if(SLIME.hitFlash>0){
-    octx.globalAlpha=Math.min(0.85, SLIME.hitFlash*4);
+    octx.globalAlpha=Math.min(0.8, SLIME.hitFlash*4);
     octx.fillStyle='#ffffff';
-    octx.fillRect(-w/2, -h, w, h);
+    octx.fillRect(bx-1, byy, w+2, h+1);
     octx.globalAlpha=1;
   }
-  octx.restore();
   // 血条
-  const bw=22, bx=Math.round(cx-bw/2), byy=Math.round(by-h-6);
-  octx.fillStyle='rgba(11,15,26,.75)'; octx.fillRect(bx-1, byy-1, bw+2, 5);
-  octx.fillStyle='#3d1418'; octx.fillRect(bx, byy, bw, 3);
-  octx.fillStyle='#7ed957'; octx.fillRect(bx, byy, Math.max(0, Math.round(bw*(SLIME.hp/SLIME.maxHp))), 3);
+  const bw=20, hx=Math.round(cx-bw/2), hy=Math.round(byy-7);
+  octx.fillStyle='rgba(11,15,26,.75)'; octx.fillRect(hx-1, hy-1, bw+2, 5);
+  octx.fillStyle='#3d1418'; octx.fillRect(hx, hy, bw, 3);
+  octx.fillStyle='#7ed957'; octx.fillRect(hx, hy, Math.max(0, Math.round(bw*(SLIME.hp/SLIME.maxHp))), 3);
 }
 function drawOrbs(){
   for(const o of orbs){
@@ -4978,9 +5036,7 @@ function drawOrbs(){
       px(x-1, y-2, 2, 2, '#60a5fa');
       octx.globalAlpha=0.35+ph*0.4; px(x-3, y-3, 6, 6, '#93c5fd'); octx.globalAlpha=1;
     } else {
-      px(x-2, y-1, 5, 3, '#b45309');
-      px(x-1, y-2, 3, 4, '#f59e0b');
-      px(x-1, y-2, 1, 1, '#fde68a');
+      drawCoinIcon(x, y, 0.4+ph*0.4);
     }
   }
   for(const c of chunks){
@@ -5001,10 +5057,16 @@ function drawOrbs(){
 }
 function drawPlayerHurt(){
   if(playerHurt<=0) return;
-  const a=Math.min(0.45, playerHurt*1.2);
+  const a=Math.min(0.55, playerHurt*1.6);
+  const x=Math.round((player.x-camX)*RES)/RES, y=Math.round((player.y-camY)*RES)/RES;
   octx.globalAlpha=a;
-  octx.fillStyle='#ff2d2d';
-  octx.fillRect(player.x-camX-6, player.y-camY-14, 13, 22);
+  octx.fillStyle='#ff3b3b';
+  // 只覆盖角色身体各部位
+  octx.fillRect(x-3, y-8, 6, 4);      // 头
+  octx.fillRect(x-3, y-12, 7, 4);     // 头发
+  octx.fillRect(x-3, y-4, 7, 8);      // 躯干
+  octx.fillRect(x-2, y+4, 2, 4);      // 左腿
+  octx.fillRect(x+1, y+4, 2, 4);      // 右腿
   octx.globalAlpha=1;
 }
 function drawInteractMarkers(){
