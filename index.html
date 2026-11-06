@@ -1084,6 +1084,9 @@ function update(dt){
   if(attacking>0) attacking=Math.max(0,attacking-dt);
   if(atkCd>0) atkCd=Math.max(0,atkCd-dt);
   updateFootParts(dt);
+  updateDmgNums(dt);
+  if(DUMMY.flash>0) DUMMY.flash=Math.max(0,DUMMY.flash-dt);
+  if(DUMMY.shake>0) DUMMY.shake=Math.max(0,DUMMY.shake-dt);
   if(player.maxMp) player.mp = Math.min(player.maxMp, (player.mp||0) + dt*0.25);
   if(solidAt(player.x,player.y)){
     let freed=false;
@@ -1766,10 +1769,12 @@ function render(){
   for(const b of BUILDINGS) if(vis(b.x,b.y-24,b.w,b.h+40)) ds.push({bottom:b.y+b.h, draw:()=>drawHouse(b)});
   for(const p of PROPS) if(vis(p.x-40,p.y-40,80,80)) ds.push({bottom:p.y, draw:()=>drawProp(p)});
   if(vis(NPC.x-16,NPC.y-24,32,40)) ds.push({bottom:NPC.y, draw:drawNPC});
+  if(vis(DUMMY.x-12,DUMMY.y-26,24,30)) ds.push({bottom:DUMMY.y, draw:drawDummy});
   ds.sort((a,b)=>a.bottom-b.bottom);
   for(const d of ds){ if(d.bottom<=player.y) d.draw(); }
   drawHero();
   for(const d of ds){ if(d.bottom>player.y) d.draw(); }
+  drawDmgNums();
   drawHUD();
   if(showFps){ const ft=fpsVal+' FPS'; drawText(ft, 4, 41, '#4ade80'); }
   if(gtime - saveMsgT < 1.3){
@@ -4089,6 +4094,18 @@ document.getElementById('dlgBox').onclick=()=>{
 // ---------- 攻击 ----------
 const ATK_DUR=0.34;
 let attacking=0, heldSlot=0, atkCd=0;
+function sfxCrit(){
+  if(!actx||!sfxOn||mutedAll) return;
+  const t=actx.currentTime;
+  [880,1320].forEach((f,i)=>{
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type='square'; o.frequency.setValueAtTime(f,t+i*0.05);
+    g.gain.setValueAtTime(0.0001,t+i*0.05);
+    g.gain.linearRampToValueAtTime(0.07,t+i*0.05+0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+i*0.05+0.14);
+    o.connect(g); g.connect(sfxGain); o.start(t+i*0.05); o.stop(t+i*0.05+0.16);
+  });
+}
 function sfxSwing(){
   if(!actx||!sfxOn||mutedAll||!noiseBuf) return;
   const t=actx.currentTime;
@@ -4112,6 +4129,10 @@ function doAttack(){
   attacking=ATK_DUR;
   atkCd=(ITEMS[wid].rate||1.8);
   sfxSwing(); vibrate(2);
+  {
+    const dx=DUMMY.x-player.x, dy=DUMMY.y-player.y;
+    if(Math.hypot(dx,dy)<36 && (dx*player.face)>=-8) hitDummy();
+  }
 }
 {
   const ab=document.getElementById('atkBtn');
@@ -4122,6 +4143,93 @@ addEventListener('keydown', e=>{
   const k=e.key.toLowerCase();
   if(k==='j'||k===' ') doAttack();
 });
+
+// ---------- 训练假人 / 伤害跳字 ----------
+const DUMMY={x:726, y:470, flash:0, shake:0};
+let dmgNums=[], hitSparks=[];
+function addDmgNum(x,y,txt,crit){
+  dmgNums.push({x,y,vy:-42,life:0.9,max:0.9,txt:String(txt),crit:!!crit});
+  if(dmgNums.length>24) dmgNums.shift();
+}
+function updateDmgNums(dt){
+  for(let i=dmgNums.length-1;i>=0;i--){
+    const d=dmgNums[i];
+    d.life-=dt; d.y+=d.vy*dt; d.vy+=120*dt;
+    if(d.life<=0) dmgNums.splice(i,1);
+  }
+  for(let i=hitSparks.length-1;i>=0;i--){
+    const p2=hitSparks[i];
+    p2.life-=dt; p2.x+=p2.vx*dt; p2.y+=p2.vy*dt; p2.vy+=180*dt;
+    if(p2.life<=0) hitSparks.splice(i,1);
+  }
+}
+function drawDmgNums(){
+  for(const d of dmgNums){
+    const a=Math.max(0, Math.min(1, d.life/0.4));
+    octx.globalAlpha=a;
+    const x=Math.round(d.x-camX), y=Math.round(d.y-camY);
+    if(d.crit){
+      drawText(d.txt, x-7, y, '#fbbf24', 2);
+      drawText(d.txt, x-6, y, '#fde68a', 2);
+    } else {
+      drawText(d.txt, x-5, y, '#ffffff', 2);
+    }
+    octx.globalAlpha=1;
+  }
+  for(const p2 of hitSparks){
+    octx.globalAlpha=Math.max(0,p2.life/0.3);
+    px(p2.x-camX, p2.y-camY, 2, 2, '#ffffff');
+    octx.globalAlpha=1;
+  }
+}
+function spawnHitSpark(x,y){
+  for(let i=0;i<7;i++){
+    const a=Math.random()*Math.PI*2;
+    hitSparks.push({x, y, vx:Math.cos(a)*60, vy:Math.sin(a)*60-30, life:0.28});
+  }
+}
+function sfxHit(){
+  if(!actx||!sfxOn||mutedAll) return;
+  const t=actx.currentTime;
+  const o=actx.createOscillator(), g=actx.createGain();
+  o.type='triangle';
+  o.frequency.setValueAtTime(220,t);
+  o.frequency.exponentialRampToValueAtTime(90,t+0.09);
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.linearRampToValueAtTime(0.18,t+0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+0.12);
+  o.connect(g); g.connect(sfxGain); o.start(t); o.stop(t+0.14);
+}
+function hitDummy(){
+  const it=ITEMS[EQUIP.weapons[heldSlot]]||{};
+  const crit=Math.random()*100 < (it.crit||4);
+  const dmg=Math.max(1, Math.round((it.dmg||5)*(crit?(it.critMult||1.7):1)));
+  DUMMY.flash=0.16; DUMMY.shake=0.2;
+  addDmgNum(DUMMY.x, DUMMY.y-30, dmg, crit);
+  spawnHitSpark(DUMMY.x, DUMMY.y-18);
+  sfxHit();
+  vibrate(crit?2:1);
+  if(crit) try{ sfxCrit(); }catch(e){}
+}
+function drawDummy(){
+  const sh = DUMMY.shake>0 ? Math.sin(gtime*80)*2 : 0;
+  const sx=Math.round((DUMMY.x-camX+sh)*RES)/RES, sy=Math.round((DUMMY.y-camY)*RES)/RES;
+  px(sx-7, sy, 14, 3, 'rgba(0,0,0,.22)');
+  px(sx-1, sy-18, 2, 18, '#6b4a2e');
+  px(sx-9, sy-17, 18, 2, '#8a6440');
+  px(sx-6, sy-16, 12, 10, '#c9a96b');
+  px(sx-6, sy-16, 12, 2, '#dcbb84');
+  for(let i=0;i<3;i++) px(sx-6, sy-13+i*3, 12, 1, '#a8894f');
+  px(sx-4, sy-22, 8, 6, '#d8b878');
+  px(sx-4, sy-22, 8, 1, '#eacd93');
+  px(sx-2, sy-20, 1, 1, '#5a3a24');
+  px(sx+1, sy-20, 1, 1, '#5a3a24');
+  if(DUMMY.flash>0){
+    octx.globalAlpha=Math.min(1, DUMMY.flash*7);
+    px(sx-9, sy-22, 18, 23, 'rgba(255,255,255,.5)');
+    octx.globalAlpha=1;
+  }
+}
 
 // ---------- 脚步粒子 ----------
 const FOOT_PAL={
