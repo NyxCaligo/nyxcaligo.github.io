@@ -3992,6 +3992,13 @@ function facingTarget(tx,ty){
   if(player.face>=0) return dx>-6;
   return dx<6;
 }
+const PROP_TEXT={
+  well:'井水很凉，深不见底。',
+  lamp:'普通的路灯。',
+  fence:'我似乎无法翻越它们。',
+  flower:'这些花真美。',
+  crate:'似乎是空心的。'
+};
 function updateInteract(){
   let best=null, bd=1e9;
   const consider=(k, x, y, extra, prio)=>{
@@ -4013,6 +4020,21 @@ function updateInteract(){
       const dd=Math.hypot(player.x-SHOP_DOOR.x, player.y-SHOP_DOOR.y);
       if(dd<14 && facingTarget(SHOP_DOOR.x, SHOP_DOOR.y)) best={k:'door', dist:dd};
     }
+    // 摆件互动（路灯/栅栏/花坛/木箱/水井）
+    if(!best){
+      for(const pr of PROPS){
+        if(!PROP_TEXT[pr.type]) continue;
+        const cx=pr.x + (pr.type==='fence' ? (pr.n||5)*3 : 0);
+        const cy=pr.y - (pr.type==='lamp'?18:6);
+        const dd=Math.hypot(player.x-cx, player.y-cy);
+        if(dd<20 && facingTarget(cx,cy) && dd<bd){ bd=dd; best={k:'prop', p:pr, dist:dd}; }
+      }
+    }
+    // 训练假人
+    if(!best){
+      const dd=Math.hypot(player.x-DUMMY.x, player.y-DUMMY.y);
+      if(dd<24 && facingTarget(DUMMY.x,DUMMY.y)) best={k:'dummy', dist:dd};
+    }
   }
   interactTarget=best;
   nearNpc=!!best;
@@ -4029,6 +4051,8 @@ document.getElementById('interactBtn').onclick=()=>{
   const t=interactTarget;
   if(t.k==='drop'){ pickupDrop(t.d); return; }
   if(t.k==='door'){ sfxBeep(); toastMsg('商店'); setTimeout(()=>{ enterShop(); }, 260); return; }
+  if(t.k==='prop'){ sfxBeep(); toastMsg(PROP_TEXT[t.p.type]||'……'); return; }
+  if(t.k==='dummy'){ sfxBeep(); toastMsg('这东西会不会活过来。'); return; }
   if(t.k==='exitDoor'){ sfxBeep(); exitShop(); return; }
   if(t.k==='counter'){ sfxBeep(); openShop(); return; }
   if(t.k==='npc'){
@@ -4469,7 +4493,7 @@ function drawGate(){
   const x=Math.round((gx-camX)*RES)/RES, y=Math.round((gy-camY)*RES)/RES;
   if(x<-110||x>VW+110||y<-160||y>VH+90) return;
   const STONE='#8a919c', STONE_L='#a9b0bb', STONE_D='#666d78', STONE_DD='#545b66';
-  const bx=(a,b,w,h,c)=>{ octx.fillStyle=c; octx.fillRect(Math.round(x+a), Math.round(y+b), w, h); };
+  const bx=(a,b,w,h,c)=>{ octx.fillStyle=c; octx.fillRect(x+a, y+b, w, h); };
   // 阴影
   bx(-46,-1,92,5,'rgba(0,0,0,.22)');
   // 与边界墙衔接的墙体（左右各一段，同一石材）
@@ -4495,9 +4519,9 @@ function drawGate(){
     const ax=-6-Math.cos(ang)*20;
     const ay=-70-Math.sin(ang)*20;
     octx.fillStyle=STONE;
-    octx.fillRect(Math.round(x+ax), Math.round(y+ay), 7, 7);
+    octx.fillRect(x+ax, y+ay, 7, 7);
     octx.fillStyle=STONE_L;
-    octx.fillRect(Math.round(x+ax), Math.round(y+ay), 7, 2);
+    octx.fillRect(x+ax, y+ay, 7, 2);
   }
   // 门洞（越往里越暗）
   bx(-20,-72,40,72,'#1b2028');
@@ -4535,7 +4559,7 @@ function drawGate(){
     const fl=0.55+0.45*Math.abs(Math.sin(gtime*4+ox));
     bx(ox,-46,2,9,'#3a2a1e');
     octx.fillStyle='rgba(255,170,60,'+fl.toFixed(2)+')';
-    octx.fillRect(Math.round(x+ox-2), Math.round(y-52), 6, 6);
+    octx.fillRect(x+ox-2, y-52, 6, 6);
     bx(ox-1,-50,4,3,'#ffe9a8');
   }
   // 路牌（告诉玩家这是出口）
@@ -4547,7 +4571,7 @@ function drawGate(){
   // 门洞微光
   octx.globalAlpha=0.10;
   octx.fillStyle='#ffe9a8';
-  octx.fillRect(Math.round(x-14), Math.round(y-60), 28, 52);
+  octx.fillRect(x-14, y-60, 28, 52);
   octx.globalAlpha=1;
 }
 
@@ -4766,7 +4790,7 @@ function drawInteractMarkers(){
     if(tx===null) return;
     const important = (interactTarget.npc==='erin' && !storyTalked) ||
                       (interactTarget.npc==='elder' && !shopTalked);
-    const bx=Math.round(tx-camX), by=Math.round(ty-camY);
+    const bx=Math.round((tx-camX)*RES)/RES, by=Math.round((ty-camY)*RES)/RES;
     octx.strokeStyle='rgba(255,255,255,.85)'; octx.lineWidth=1;
     octx.strokeRect(bx-8, by-14, 17, 25);
     const col = important ? '#f5c542' : '#f2f5f9';
