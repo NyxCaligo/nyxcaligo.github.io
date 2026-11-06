@@ -726,6 +726,7 @@
     <div class="sp-group">
       <button id="openRedeem" class="sp-full sp-alt">兑换码</button>
       <button id="openSave" class="sp-full sp-alt">存档</button>
+      <div id="buildTag" style="font-size:10px;color:#5b7089;text-align:center;padding:4px 0"></div>
     </div>
   </div>
   <div id="spSave" class="sp-page hidden">
@@ -812,7 +813,8 @@ function viewSize(){
 function resizeIfNeeded(){
   const {W,H}=viewSize();
   const d=window.devicePixelRatio||1;
-  if(cv.width!==Math.round(W*d) || cv.height!==Math.round(H*d)) resize();
+  if(cv.width!==Math.round(W*d) || cv.height!==Math.round(H*d)) try{ const bt=document.getElementById('buildTag'); if(bt) bt.textContent='构建 '+BUILD+' · STELLAR ECHO'; }catch(e){}
+resize();
 }
 function resize(){
   dpr = window.devicePixelRatio || 1;
@@ -955,6 +957,7 @@ const borderDeco = [];
 let state='menu', last=0;
 let camX=0, camY=0, camXs=0, camYs=0, walkPhase=0;
 let player = { x:680, y:448, hp:100, maxHp:100, r:6, speed:120, face:1 };
+const BUILD='v116';
 let level=0, xp=0, xpNeed=100;
 function nextXpNeed(cur){ return Math.max(1, Math.round((cur||100)*1.07)); }
 
