@@ -1064,6 +1064,7 @@ function update(dt){
     lastStep = -1;
   }
   if(attacking>0) attacking=Math.max(0,attacking-dt);
+  if(atkCd>0) atkCd=Math.max(0,atkCd-dt);
   updateFootParts(dt);
   if(player.maxMp) player.mp = Math.min(player.maxMp, (player.mp||0) + dt*0.25);
   if(solidAt(player.x,player.y)){
@@ -1526,8 +1527,8 @@ function drawHero(){
     let ang;
     if(atkP>=0) ang = -1.15 + 2.5*Math.min(1, atkP*1.35);
     else ang = 0.55 + (moving?Math.sin(walkPhase)*0.10:0);
-    const hx = atkP>=0 ? 7 : 5;
-    const hy = atkP>=0 ? -4 : -3;
+    const hx = atkP>=0 ? 6.5 : 4.5;
+    const hy = atkP>=0 ? -1.5 : 0.5;
     octx.save();
     octx.translate(hx, hy);
     octx.rotate(ang);
@@ -3950,7 +3951,7 @@ document.getElementById('dlgBox').onclick=()=>{
 
 // ---------- 攻击 ----------
 const ATK_DUR=0.34;
-let attacking=0, heldSlot=0;
+let attacking=0, heldSlot=0, atkCd=0;
 function sfxSwing(){
   if(!actx||!sfxOn||mutedAll||!noiseBuf) return;
   const t=actx.currentTime;
@@ -3970,8 +3971,9 @@ function doAttack(){
   if(talking || state!=='city') return;
   const wid=EQUIP.weapons[heldSlot];
   if(!wid || !ITEMS[wid]){ toastMsg('您还没有装备武器'); sfxBeep(); return; }
-  if(attacking>0) return;
+  if(attacking>0 || atkCd>0) return;
   attacking=ATK_DUR;
+  atkCd=(ITEMS[wid].rate||1.8);
   sfxSwing(); vibrate(2);
 }
 {
@@ -4114,6 +4116,7 @@ function updateHudButtons(){
 
   const ab=document.getElementById('atkBtn');
   if(ab) ab.classList.toggle('hidden', hide || equipOpen || bagOpen || talking);
+  if(ab) ab.style.opacity = (atkCd>0) ? '0.5' : '1';
   const ib=document.getElementById('interactBtn');
   if(ib){
     ib.classList.toggle('hidden', hide || equipOpen || bagOpen || talking);
