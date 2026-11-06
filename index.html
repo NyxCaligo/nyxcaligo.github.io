@@ -531,23 +531,23 @@
 <div id="errBox" style="position:fixed;left:50%;bottom:60px;transform:translateX(-50%);z-index:99;display:none;max-width:86vw;padding:8px 12px;background:rgba(120,20,20,.92);color:#fff;font-size:11px;border:1px solid #f87171"></div>
 <div id="shopWrap" class="modal hidden" style="z-index:20; align-items:flex-start; padding-top:10vh;">
   <div class="modal-bg" id="shopBg"></div>
-  <div class="modal-box" style="width:min(330px,86vw); padding:14px">
+  <div class="modal-box" style="width:min(330px,86vw); padding:14px;background:linear-gradient(180deg,#5a3f28,#3a2818);border:2px solid #2b1c10;box-shadow:inset 0 2px 0 #7a5636, 0 6px 0 #1a120a, 0 0 18px rgba(0,0,0,.5)">
     <div class="panel-head">
-      <span class="pixlabel" id="shopTitle"></span>
+      <span class="pixlabel" id="shopTitle" style="color:#f5e6cf"></span>
       <button class="xBtn" id="shopClose">✕</button>
     </div>
     <div style="display:flex;gap:6px;width:100%;margin-bottom:8px">
-      <button id="shopTabBuy" class="sp-full" style="flex:1">购买</button>
-      <button id="shopTabSell" class="sp-full sp-alt" style="flex:1">出售</button>
+      <button id="shopTabBuy" class="sp-full" style="flex:1;background:linear-gradient(180deg,#a8874f,#7a5a2e);border-color:#2b1c10;box-shadow:inset 0 1px 0 #d4b24a,0 3px 0 #1a120a">购买</button>
+      <button id="shopTabSell" class="sp-full sp-alt" style="flex:1;background:linear-gradient(180deg,#4a3524,#33251a);border-color:#2b1c10;box-shadow:inset 0 1px 0 #6b4a2e,0 3px 0 #1a120a">出售</button>
     </div>
-    <div style="display:flex;justify-content:space-between;font-size:11px;color:#8fb3d9;width:100%;margin-bottom:6px">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#e8c07a;width:100%;margin-bottom:6px">
       <span>金币：0</span><span>货架整理中</span>
     </div>
     <div id="shopBody" style="width:100%">
       <div id="shopGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px"></div>
-      <div style="text-align:center;font-size:11px;color:#5b7089;padding:10px 0">商品整理中…老店主还在上货</div>
+      <div style="text-align:center;font-size:11px;color:#a8874f;padding:10px 0">商品整理中…老店主还在上货</div>
     </div>
-    <button id="shopLeave" class="sp-full sp-alt" style="margin-top:6px">离开柜台</button>
+    <button id="shopLeave" class="sp-full sp-alt" style="margin-top:6px;background:linear-gradient(180deg,#4a3524,#33251a);border-color:#2b1c10;box-shadow:inset 0 1px 0 #6b4a2e,0 3px 0 #1a120a">离开柜台</button>
   </div>
 </div>
 <div id="statsWrap" class="modal hidden" style="z-index:19; align-items:flex-start; padding-top:8vh;">
@@ -3946,15 +3946,9 @@ function drawAmbient(){
     if(interactTarget.npc==='elder'){ tx2=ELDER.x; ty2=ELDER.y; }
     else if(interactTarget.npc==='officer'){ tx2=OFFICER.x; ty2=OFFICER.y; }
     const bx=Math.round(tx2-camX), by=Math.round(ty2-camY);
-    octx.strokeStyle='rgba(255,255,255,.9)'; octx.lineWidth=1;
+    octx.strokeStyle='rgba(255,255,255,.85)'; octx.lineWidth=1;
     octx.strokeRect(bx-8, by-14, 17, 25);
-    // 只有剧情 NPC 才冒感叹号
-    if(interactTarget.npc==='erin'){
-      px(bx-4, by-30, 9, 12, '#0b0f1a');
-      px(bx-3, by-29, 7, 10, '#f5c542');
-      px(bx, by-27, 1, 5, '#0b0f1a');
-      px(bx, by-21, 1, 1, '#0b0f1a');
-    }
+    drawStar(bx, by-30, interactTarget.npc==='erin'?1:0.8);
   }
   for(let i=0;i<14;i++){
     const fx=hash(i,7)*WORLD_W + Math.sin(gtime*0.15+i)*30;
@@ -4004,13 +3998,13 @@ function toastMsg(t){
   const el=document.getElementById('msgToast'); if(!el) return;
   el.textContent=t; el.style.opacity='1';
   clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>{ el.style.opacity='0'; }, 1600);
+  toastTimer=setTimeout(()=>{ el.style.opacity='0'; }, 900);
 }
 document.getElementById('interactBtn').onclick=()=>{
   if(talking || !interactTarget) return;
   const t=interactTarget;
   if(t.k==='drop'){ pickupDrop(t.d); return; }
-  if(t.k==='door'){ sfxBeep(); enterShop(); return; }
+  if(t.k==='door'){ sfxBeep(); toastMsg('商店'); return; }
   if(t.k==='exitDoor'){ sfxBeep(); exitShop(); return; }
   if(t.k==='counter'){ sfxBeep(); openShop(); return; }
   if(t.k==='npc'){
@@ -4359,71 +4353,81 @@ const ROOM={w:128, h:128};
 let inShop=false, shopTalked=false, officerTalked=false, townPos=null;
 function drawElder(){
   const x=Math.round((ELDER.x-camX)*RES)/RES;
-  const bob=Math.sin(performance.now()/900)*0.5;
+  const bob=Math.sin(gtime*1.4)*0.4;
   const y=Math.round((ELDER.y-camY)*RES)/RES + bob;
-  px(x-5, y+8, 10, 2, 'rgba(0,0,0,.16)');
-  px(x-4, y+5, 3, 3, '#4a3a2a'); px(x+1, y+5, 3, 3, '#4a3a2a');
-  px(x-3, y+1, 2, 4, '#3f3f46'); px(x+1, y+1, 2, 4, '#3f3f46');
-  // 长袍
-  px(x-5, y-9, 10, 12, '#5b5b63');
-  px(x-5, y-9, 10, 2, '#6b6b74');
-  px(x-1, y-8, 2, 10, '#4a4a52');
-  // 红色披风
-  px(x-6, y-10, 12, 3, '#7f2b2b');
-  px(x-7, y-8, 2, 10, '#6b2424'); px(x+5, y-8, 2, 10, '#6b2424');
-  // 头 + 白发白须
-  px(x-3, y-15, 6, 5, '#e8c9a8');
-  px(x-4, y-17, 8, 3, '#f0f0f0');
-  px(x-4, y-14, 2, 3, '#e4e4e4'); px(x+2, y-14, 2, 3, '#e4e4e4');
-  px(x-2, y-12, 4, 3, '#f5f5f5');
-  px(x-2, y-13, 1, 1, '#3a2a1e'); px(x+1, y-13, 1, 1, '#3a2a1e');
-  // 柜台内也用它
-  px(x-6, y-11, 1, 1, '#d4b24a');
+  // 比主角矮一点、略微驼背
+  px(x-5, y+7, 10, 2, 'rgba(0,0,0,.18)');
+  // 靴
+  px(x-4, y+5, 3, 3, '#3a2a1e'); px(x+1, y+5, 3, 3, '#3a2a1e');
+  // 长袍（矮）
+  px(x-5, y-4, 10, 9, '#5b5b63');
+  px(x-5, y-4, 10, 2, '#6b6b74');
+  px(x-1, y-3, 2, 7, '#4a4a52');
+  px(x-5, y+4, 10, 1, '#44444c');
+  // 红披风
+  px(x-6, y-6, 12, 3, '#7f2b2b');
+  px(x-7, y-4, 2, 8, '#6b2424'); px(x+5, y-4, 2, 8, '#6b2424');
+  px(x-6, y-5, 12, 1, '#96342f');
+  // 腰带金扣
+  px(x-1, y+1, 2, 2, '#d4b24a');
+  // 头（矮）
+  px(x-3, y-10, 6, 5, '#e8c9a8');
+  px(x-4, y-12, 8, 3, '#f0f0f0');
+  px(x-4, y-9, 2, 3, '#e4e4e4'); px(x+2, y-9, 2, 3, '#e4e4e4');
+  // 白须
+  px(x-2, y-7, 4, 3, '#f5f5f5');
+  px(x-2, y-4, 4, 1, '#e4e4e4');
+  // 眼睛（老年，眼睑下垂）
+  px(x-2, y-8, 1, 1, '#3a2a1e'); px(x+1, y-8, 1, 1, '#3a2a1e');
+  px(x-3, y-9, 2, 1, '#d8d8d8'); px(x+1, y-9, 2, 1, '#d8d8d8');
 }
 function drawOfficer(){
   const x=Math.round((OFFICER.x-camX)*RES)/RES;
   const bob=Math.sin(gtime*1.1)*0.5;
   const y=Math.round((OFFICER.y-camY)*RES)/RES + bob;
-  // 影子
-  px(x-6, y+8, 12, 2, 'rgba(0,0,0,.18)');
-  // 靴子
+  // 和主角差不多高
+  px(x-6, y+7, 12, 2, 'rgba(0,0,0,.2)');
+  // 靴（深棕）
   px(x-4, y+4, 3, 4, '#2a2118'); px(x+1, y+4, 3, 4, '#2a2118');
-  px(x-5, y+7, 4, 1, '#1a1410'); px(x+1, y+7, 4, 1, '#1a1410');
-  // 护腿（皮甲）
-  px(x-4, y-2, 3, 6, '#8a6a3a'); px(x+1, y-2, 3, 6, '#8a6a3a');
-  px(x-4, y-2, 3, 1, '#a8874f'); px(x+1, y-2, 3, 1, '#a8874f');
+  px(x-5, y+7, 4, 1, '#17120c'); px(x+1, y+7, 4, 1, '#17120c');
+  // 马裤
+  px(x-4, y+0, 3, 5, '#3a3229'); px(x+1, y+0, 3, 5, '#3a3229');
+  // 护腿皮甲
+  px(x-4, y+1, 3, 3, '#8a6a3a'); px(x+1, y+1, 3, 3, '#8a6a3a');
   // 长外套下摆
-  px(x-5, y-9, 10, 8, '#4a3524');
-  px(x-5, y-3, 10, 2, '#3a2a1c');
-  // 胸甲
-  px(x-5, y-15, 10, 7, '#5a3f28');
-  px(x-5, y-15, 10, 2, '#7a5636');
-  px(x-1, y-15, 2, 7, '#3f2c1c');
-  // 金色饰件
-  px(x-2, y-14, 1, 1, '#d4b24a'); px(x+1, y-14, 1, 1, '#d4b24a');
-  px(x-1, y-12, 2, 2, '#c9a227');
+  px(x-5, y-6, 10, 7, '#4a3524');
+  px(x-5, y-1, 10, 2, '#3a2a1c');
+  // 胸甲（棕皮）
+  px(x-5, y-11, 10, 6, '#5a3f28');
+  px(x-5, y-11, 10, 1, '#7a5636');
+  px(x-1, y-11, 2, 6, '#3f2c1c');
+  px(x-2, y-10, 1, 1, '#d4b24a'); px(x+1, y-10, 1, 1, '#d4b24a');
+  // 金色十字胸饰
+  px(x-1, y-9, 2, 3, '#c9a227');
+  px(x-2, y-8, 4, 1, '#d4b24a');
   // 肩甲
-  px(x-7, y-15, 3, 4, '#6b4a2e'); px(x+4, y-15, 3, 4, '#6b4a2e');
-  px(x-7, y-15, 3, 1, '#a8874f'); px(x+4, y-15, 3, 1, '#a8874f');
-  // 披风/高领
-  px(x-5, y-18, 10, 3, '#3a2a1c');
-  px(x-4, y-18, 8, 1, '#5a3f28');
+  px(x-7, y-11, 3, 3, '#6b4a2e'); px(x+4, y-11, 3, 3, '#6b4a2e');
+  px(x-7, y-11, 3, 1, '#a8874f'); px(x+4, y-11, 3, 1, '#a8874f');
+  // 高领
+  px(x-4, y-14, 8, 3, '#2b2119');
+  px(x-3, y-14, 6, 1, '#4a3524');
   // 头
-  px(x-3, y-23, 6, 5, '#e0b18a');
-  px(x-3, y-22, 1, 1, '#e8c49c');
-  // 灰发
-  px(x-4, y-26, 8, 3, '#b9b2a6');
-  px(x-4, y-24, 2, 2, '#a8a196'); px(x+2, y-24, 2, 2, '#a8a196');
-  px(x-3, y-27, 6, 1, '#cfc8bc');
-  // 灰胡须
-  px(x-3, y-19, 6, 2, '#b9b2a6');
-  px(x-2, y-17, 4, 1, '#a8a196');
-  // 眉眼
-  px(x-2, y-22, 1, 1, '#2b1a12'); px(x+1, y-22, 1, 1, '#2b1a12');
-  px(x-3, y-23, 2, 1, '#8a7a6a'); px(x+1, y-23, 2, 1, '#8a7a6a');
-  // 佩剑
-  px(x+6, y-8, 1, 9, '#8a6a3a');
-  px(x+5, y-9, 3, 1, '#d4b24a');
+  px(x-3, y-18, 6, 5, '#e0b18a');
+  px(x-3, y-17, 1, 1, '#ecc49e');
+  // 灰发（后梳）
+  px(x-4, y-21, 8, 3, '#b9b2a6');
+  px(x-4, y-19, 2, 2, '#a8a196'); px(x+2, y-19, 2, 2, '#a8a196');
+  px(x-3, y-22, 6, 1, '#cfc8bc');
+  // 灰胡
+  px(x-3, y-14, 6, 2, '#b9b2a6');
+  px(x-2, y-12, 4, 1, '#a8a196');
+  // 眉眼（严肃）
+  px(x-2, y-17, 1, 1, '#2b1a12'); px(x+1, y-17, 1, 1, '#2b1a12');
+  px(x-3, y-18, 2, 1, '#8a7a6a'); px(x+1, y-18, 2, 1, '#8a7a6a');
+  // 佩剑（左腰）
+  px(x-7, y-4, 1, 9, '#8a6a3a');
+  px(x-8, y-5, 3, 1, '#d4b24a');
+  px(x-7, y+5, 1, 2, '#6b4a2e');
 }
 function drawShopDoorMark(){
   const x=Math.round((SHOP_DOOR.x-camX)*RES)/RES, y=Math.round((SHOP_DOOR.y-camY)*RES)/RES;
@@ -4661,6 +4665,21 @@ function hitDummy(){
   vibrate(crit?2:1);
   if(crit) try{ sfxCrit(); }catch(e){}
 }
+function drawStar(cx,cy,k){
+  const s2=k||1;
+  const w=Math.round(7*s2);
+  // 四角星：中心亮黄，边缘暗金
+  px(cx-1, cy-5, 3, 3, '#7a5a1a');
+  px(cx-4, cy-2, 9, 3, '#7a5a1a');
+  px(cx-1, cy+1, 3, 3, '#7a5a1a');
+  px(cx, cy-4, 1, 7, '#ffe9a8');
+  px(cx-3, cy-1, 7, 1, '#ffe9a8');
+  px(cx, cy-1, 1, 1, '#ffffff');
+  px(cx-5, cy-3, 2, 2, '#f5c542');
+  px(cx+4, cy-3, 2, 2, '#f5c542');
+  px(cx-5, cy+2, 2, 2, '#f5c542');
+  px(cx+4, cy+2, 2, 2, '#f5c542');
+}
 function drawDummy(){
   const sh = DUMMY.shake>0 ? Math.sin(gtime*80)*2 : 0;
   const sx=Math.round((DUMMY.x-camX+sh)*RES)/RES, sy=Math.round((DUMMY.y-camY)*RES)/RES;
@@ -4849,7 +4868,7 @@ try{
   const sg=document.getElementById('shopGrid');
   if(sc) sc.onclick=()=>document.getElementById('shopWrap').classList.add('hidden');
   if(sbg) sbg.onclick=()=>document.getElementById('shopWrap').classList.add('hidden');
-  if(slv) slv.onclick=()=>{ document.getElementById('shopWrap').classList.add('hidden'); exitShop(); sfxBeep(); };
+  if(slv) slv.onclick=()=>{ document.getElementById('shopWrap').classList.add('hidden'); sfxBeep(); toastMsg('再看看货架'); };
   if(sbb&&sss){
     sbb.onclick=()=>{ sbb.classList.remove('sp-alt'); sss.classList.add('sp-alt'); sfxBeep(); };
     sss.onclick=()=>{ sss.classList.remove('sp-alt'); sbb.classList.add('sp-alt'); sfxBeep(); };
