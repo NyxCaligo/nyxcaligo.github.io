@@ -586,6 +586,7 @@
     <button id="devAll2" class="sp-full sp-alt">全部物品各 +1</button>
     <button id="devClear2" class="sp-full sp-alt">清空背包</button>
     <button id="devResetStory2" class="sp-full sp-alt">重置剧情对话</button>
+    <button id="devSlime2" class="sp-full sp-alt">生成史莱姆</button>
     <button id="devClose" class="sp-full">关闭</button>
   </div>
 </div>
@@ -881,7 +882,7 @@ function resize(){
   oxCss = Math.floor((cv.width - VW*P)/2);
   oyCss = Math.floor((cv.height - VH*P)/2);
   ctx.imageSmoothingEnabled = false;
-  JBX = VW*0.165; JBY = VH*0.76;
+  JBX = VW*0.20; JBY = VH*0.70;
 }
 resize();
 window.addEventListener('resize', ()=>{ resize(); checkOrientation(); });
@@ -1132,6 +1133,9 @@ function update(dt){
   if(atkCd>0) atkCd=Math.max(0,atkCd-dt);
   updateFootParts(dt);
   updateDmgNums(dt);
+  updateSlime(dt);
+  updateOrbs(dt);
+  updateCombatFx(dt);
   if(DUMMY.flash>0) DUMMY.flash=Math.max(0,DUMMY.flash-dt);
   if(DUMMY.shake>0) DUMMY.shake=Math.max(0,DUMMY.shake-dt);
   if(player.maxMp) player.mp = Math.min(player.maxMp, (player.mp||0) + dt*0.25);
@@ -1662,6 +1666,18 @@ function drawHUD(){
   }
 }
 
+function drawCoinHud(){
+  const x=Math.max(6, JBX-JR-2), y=JBY+JR+8;
+  // 橙色铜币
+  const cx=x+4, cy=y+3;
+  octx.fillStyle='#7a3d0a';
+  octx.beginPath(); octx.arc(cx,cy,4.5,0,7); octx.fill();
+  octx.fillStyle='#f59e0b';
+  octx.beginPath(); octx.arc(cx,cy,3.5,0,7); octx.fill();
+  octx.fillStyle='#fde68a';
+  octx.beginPath(); octx.arc(cx-1,cy-1,1.4,0,7); octx.fill();
+  drawText(String(Math.floor(money)), x+11, y, '#fde68a', 1.4);
+}
 function drawJoystick(){
   const S=JR*2, x=Math.round(JBX-S/2), y=Math.round(JBY-S/2);
   // 方形底盘
@@ -1825,6 +1841,7 @@ function renderShopRoom(){
   }
   if(equipHudOn && !talking) drawEquipHUD();
   drawJoystick();
+  drawCoinHud();
   drawCharPortrait();
   drawHUD();
   if(showFps){ drawText(fpsVal+' FPS', 4, 41, '#4ade80'); }
@@ -1862,6 +1879,7 @@ function render(){
   }
   drawAmbient();
   drawFootParts();
+  drawOrbs();
   drawDrops();
   const ds=[];
   const vx0=camX-40, vx1=camX+VW+40, vy0=camY-60, vy1=camY+VH+40;
@@ -1870,6 +1888,7 @@ function render(){
   for(const p of PROPS) if(vis(p.x-40,p.y-40,80,80)) ds.push({bottom:p.y, draw:()=>drawProp(p)});
   if(vis(NPC.x-16,NPC.y-24,32,40)) ds.push({bottom:NPC.y, draw:drawNPC});
   if(vis(DUMMY.x-12,DUMMY.y-26,24,30)) ds.push({bottom:DUMMY.y, draw:drawDummy});
+  if(SLIME.alive) ds.push({bottom:SLIME.y, draw:drawSlime});
   if(vis(ELDER.x-8,ELDER.y-20,16,30)) ds.push({bottom:ELDER.y, draw:drawElder});
   if(vis(OFFICER.x-8,OFFICER.y-20,16,30)) ds.push({bottom:OFFICER.y, draw:drawOfficer});
   ds.push({bottom:SHOP_DOOR.y+2, draw:drawShopDoorMark});
@@ -1878,6 +1897,7 @@ function render(){
   for(const d of ds){ if(d.bottom<=player.y) d.draw(); }
   drawHero();
   for(const d of ds){ if(d.bottom>player.y) d.draw(); }
+  drawPlayerHurt();
   drawInteractMarkers();
   drawDmgNums();
   drawHUD();
@@ -1896,7 +1916,7 @@ function render(){
     octx.fillStyle='#f5e6cf';
     octx.fillText('暂停中', VW/2-12, 17);
   }
-  if(state==='city'){ if(equipHudOn && !talking) drawEquipHUD(); drawJoystick(); }
+  if(state==='city'){ if(equipHudOn && !talking) drawEquipHUD(); drawJoystick(); drawCoinHud(); }
 
   blitToScreen();
 }
@@ -3468,6 +3488,7 @@ document.getElementById('devClose').onclick=()=>document.getElementById('devWrap
 document.getElementById('devBg').onclick=()=>document.getElementById('devWrap').classList.add('hidden');
 document.getElementById('devAll2').onclick=()=>{ for(const id in ITEMS) addItem(id,1); renderBag(); saveGame(); toastMsg('已加入全部物品'); };
 document.getElementById('devClear2').onclick=()=>{ bagItems=[]; renderBag(); saveGame(); toastMsg('背包已清空'); };
+document.getElementById('devSlime2').onclick=()=>{ spawnSlime(); toastMsg('已生成史莱姆'); };
 document.getElementById('devResetStory2').onclick=()=>{
   storyTalked=false; try{ dlgGiven={}; }catch(e){}
   saveGame(); toastMsg('剧情已重置，可再次与艾琳对话');
@@ -4057,14 +4078,14 @@ document.getElementById('interactBtn').onclick=()=>{
   if(t.k==='counter'){ sfxBeep(); openShop(); return; }
   if(t.k==='npc'){
     if(t.npc==='erin'){
-      if(storyTalked){ toastMsg('艾琳：路上小心。'); return; }
+      if(storyTalked){ sfxBeep(); openDialogue('erinAgain'); return; }
       sfxBeep(); openDialogue('start'); return;
     }
     if(t.npc==='elder'){
       sfxBeep(); openDialogue(shopTalked?'elderAgain':'elderIntro'); return;
     }
     if(t.npc==='officer'){
-      sfxBeep(); openDialogue('officerSay'); return;
+      sfxBeep(); openDialogue(guardTalked?'officerSay':'guard1'); return;
     }
   }
 };
@@ -4124,7 +4145,10 @@ const DLG_DATA={
   ]},
   elderEnd2:{name:'马尔科 · 商人', who:'elder', text:'有什么需要的可以来我这。', shop:true},
   elderAgain:{name:'马尔科 · 商人', who:'elder', text:'有什么需要的可以来我这。', shop:true},
-  officerSay:{name:'罗兰 · 守卫', who:'officer', text:'……'}
+  guard1:{name:'罗兰 · 守卫', who:'officer', text:'新来的吗？', choices:[{label:'没错', next:'guard2'}]},
+  guard2:{name:'罗兰 · 守卫', who:'officer', text:'外面太危险了，我得测试你能不能独自击败怪物。', spawn:'slime'},
+  officerSay:{name:'罗兰 · 守卫', who:'officer', text:'……'},
+  erinAgain:{name:'艾琳 · 平民', who:'npc', text:'路上小心。'}
 };
 let storyTalked=false;
 let talking=false, dlgNode=null, dlgFull='', dlgPos=0, dlgDone=false, dlgTimer=null, dlgGiven={};
@@ -4280,6 +4304,7 @@ function openDialogue(key){
 }
 function closeDialogue(){
   if(dlgNode && dlgNode.shop) shopTalked=true;
+  if(dlgNode && dlgNode.spawn==='slime' && !guardTalked){ guardTalked=true; spawnSlime(); }
   if(dlgNode && dlgNode.who==='officer') officerTalked=true;
   if(dlgNode){ storyTalked=true; try{ saveGame(); }catch(e){} }
   talking=false; dlgNode=null;
@@ -4382,6 +4407,16 @@ function doAttack(){
     const dx=DUMMY.x-player.x, dy=DUMMY.y-player.y;
     if(Math.hypot(dx,dy)<36 && (dx*player.face)>=-8) hitDummy();
   }
+  if(SLIME.alive){
+    const sdx=SLIME.x-player.x, sdy=SLIME.y-player.y;
+    const sd=Math.hypot(sdx,sdy);
+    if(sd<36 && (sdx*player.face)>=-8){
+      const it2=ITEMS[wid]||{};
+      const crit2=Math.random()*100<(it2.crit||4);
+      const dmg2=Math.max(1, Math.round((it2.dmg||5)*(crit2?(it2.critMult||1.7):1)));
+      hitSlime(dmg2, crit2);
+    }
+  }
 }
 {
   const ab=document.getElementById('atkBtn');
@@ -4392,6 +4427,53 @@ addEventListener('keydown', e=>{
   const k=e.key.toLowerCase();
   if(k==='j'||k===' ') doAttack();
 });
+
+// ---------- 史莱姆战斗 ----------
+const SLIME_ART='data:image/png;base64,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';
+let slimeImg=null;
+const SLIME={alive:false, x:0,y:0, hp:20, maxHp:20, dmg:4, r:10, vx:0, vy:0,
+             iframe:0, atkCd:0, hitFlash:0, atkAnim:0, wob:0, face:1, hurt:0};
+let playerIframe=0, playerHurt=0, guardTalked=false;
+let orbs=[], chunks=[], splats=[];
+function spawnSlime(){
+  SLIME.alive=true; SLIME.hp=SLIME.maxHp=20;
+  SLIME.x=OFFICER.x-30; SLIME.y=OFFICER.y+26;
+  SLIME.iframe=0; SLIME.atkCd=1; SLIME.hitFlash=0; SLIME.wob=Math.random()*6;
+  toastMsg('一只史莱姆出现了！');
+  sfxCrit();
+}
+function hitSlime(dmg, crit){
+  if(!SLIME.alive) return;
+  if(SLIME.iframe>0) return;
+  SLIME.iframe=0.4; SLIME.hitFlash=0.2;
+  SLIME.hp-=dmg;
+  addDmgNum(SLIME.x, SLIME.y-18, dmg, crit);
+  spawnHitSpark(SLIME.x, SLIME.y-8);
+  // 击退
+  const dx=SLIME.x-player.x, dy=SLIME.y-player.y, d=Math.hypot(dx,dy)||1;
+  SLIME.vx=dx/d*90; SLIME.vy=dy/d*90;
+  if(SLIME.hp<=0) killSlime();
+}
+function killSlime(){
+  SLIME.alive=false;
+  // 经验球 + 铜币（爆发）
+  for(let i=0;i<2;i++) orbs.push({kind:'xp', x:SLIME.x, y:SLIME.y-6, vx:(Math.random()*2-1)*70, vy:-Math.random()*70-30, life:14, val:4});
+  for(let i=0;i<3;i++) orbs.push({kind:'coin', x:SLIME.x, y:SLIME.y-6, vx:(Math.random()*2-1)*80, vy:-Math.random()*80-30, life:14, val:1});
+  // 尸块
+  for(let i=0;i<5;i++){
+    const a=Math.random()*Math.PI*2;
+    chunks.push({x:SLIME.x, y:SLIME.y-8, vx:Math.cos(a)*70, vy:-Math.random()*80-20,
+                 life:3+Math.random()*2, size:2+Math.floor(Math.random()*2),
+                 col:['#7ed957','#5cc23a','#9df07a'][i%3]});
+  }
+  // 粘液飞溅（落地消失）
+  for(let i=0;i<8;i++){
+    const a=Math.random()*Math.PI*2;
+    splats.push({x:SLIME.x, y:SLIME.y-8, vx:Math.cos(a)*60, vy:-Math.random()*60-20, life:1.2, dead:false});
+  }
+  sfxHit();
+  toastMsg('击败了史莱姆');
+}
 
 // ---------- 新 NPC 与店铺 ----------
 const ELDER={x:884, y:404};
@@ -4573,6 +4655,86 @@ function drawGate(){
   octx.fillStyle='#ffe9a8';
   octx.fillRect(x-14, y-60, 28, 52);
   octx.globalAlpha=1;
+}
+
+function updateSlime(dt){
+  if(playerIframe>0) playerIframe=Math.max(0,playerIframe-dt);
+  if(playerHurt>0) playerHurt=Math.max(0,playerHurt-dt);
+  if(!SLIME.alive) return;
+  if(SLIME.iframe>0) SLIME.iframe=Math.max(0,SLIME.iframe-dt);
+  if(SLIME.hitFlash>0) SLIME.hitFlash=Math.max(0,SLIME.hitFlash-dt);
+  if(SLIME.atkAnim>0) SLIME.atkAnim=Math.max(0,SLIME.atkAnim-dt);
+  SLIME.wob+=dt*7;
+  const dx=player.x-SLIME.x, dy=player.y-SLIME.y;
+  const dist=Math.hypot(dx,dy)||1;
+  SLIME.face = dx>=0?1:-1;
+  // 击退惯性
+  SLIME.x+=SLIME.vx*dt; SLIME.y+=SLIME.vy*dt;
+  SLIME.vx*=Math.pow(0.001,dt); SLIME.vy*=Math.pow(0.001,dt);
+  // 追玩家（锁定）
+  const speed=52;
+  if(dist>14){
+    let nx=SLIME.x+dx/dist*speed*dt, ny=SLIME.y+dy/dist*speed*dt;
+    if(!solidAt(nx,SLIME.y)) SLIME.x=nx;
+    if(!solidAt(SLIME.x,ny)) SLIME.y=ny;
+  }
+  // 攻击
+  if(SLIME.atkCd>0) SLIME.atkCd=Math.max(0,SLIME.atkCd-dt);
+  if(dist<16 && SLIME.atkCd<=0){
+    SLIME.atkCd=1.2; SLIME.atkAnim=0.22;
+    if(playerIframe<=0 && player.hp>0){
+      player.hp=Math.max(0,player.hp-SLIME.dmg);
+      playerIframe=0.4; playerHurt=0.32;
+      addDmgNum(player.x, player.y-20, SLIME.dmg, false);
+      vibrate(3); sfxHit();
+      saveGame();
+    }
+  }
+}
+function updateOrbs(dt){
+  for(let i=orbs.length-1;i>=0;i--){
+    const o=orbs[i];
+    o.life-=dt;
+    const dx=player.x-o.x, dy=player.y-6-o.y, d=Math.hypot(dx,dy)||1;
+    if(d<32){ o.vx+=dx/d*420*dt; o.vy+=dy/d*420*dt; }
+    o.vx*=Math.pow(0.12,dt); o.vy*=Math.pow(0.12,dt);
+    o.x+=o.vx*dt; o.y+=o.vy*dt;
+    if(d<8){
+      if(o.kind==='xp') gainXp(o.val||4);
+      else { money+=(o.val||1); }
+      orbs.splice(i,1); sfxBeep();
+      continue;
+    }
+    if(o.life<=0) orbs.splice(i,1);
+  }
+}
+function gainXp(n){
+  xp+=n;
+  while(xp>=xpNeed){
+    xp-=xpNeed; level++; xpNeed=nextXpNeed(xpNeed);
+    toastMsg('升级！Lv '+level); sfxEquip(); vibrate(3);
+  }
+}
+function updateCombatFx(dt){
+  for(let i=chunks.length-1;i>=0;i--){
+    const c=chunks[i];
+    c.life-=dt;
+    c.vy+=260*dt; c.x+=c.vx*dt; c.y+=c.vy*dt; c.vx*=Math.pow(0.4,dt);
+    if(c.life<=0) chunks.splice(i,1);
+  }
+  for(let i=splats.length-1;i>=0;i--){
+    const p2=splats[i];
+    p2.life-=dt;
+    if(!p2.dead){
+      p2.vy+=300*dt; p2.x+=p2.vx*dt; p2.y+=p2.vy*dt;
+      if(p2.y>=p2.groundY){} // 占位
+      if(p2.life<=0.6){ p2.dead=true; p2.deadT=0.5; }
+    } else {
+      p2.deadT-=dt;
+      if(p2.deadT<=0) splats.splice(i,1);
+    }
+  }
+  if(splats.length>60) splats.splice(0, splats.length-60);
 }
 
 // ---------- 商店内部逻辑 ----------
@@ -4778,6 +4940,72 @@ function hitDummy(){
   sfxHit();
   vibrate(crit?2:1);
   if(crit) try{ sfxCrit(); }catch(e){}
+}
+function drawSlime(){
+  if(!SLIME.alive) return;
+  if(!slimeImg){ slimeImg=new Image(); slimeImg.src=SLIME_ART; return; }
+  const sq=Math.sin(SLIME.wob)*0.10 + (SLIME.atkAnim>0?0.18:0);
+  const w=22*(1+sq), h=22*(1-sq*0.8);
+  const cx=SLIME.x-camX, by=SLIME.y-camY;
+  // 影子
+  octx.globalAlpha=0.22; octx.fillStyle='#000';
+  octx.beginPath(); octx.ellipse(cx, by+1, w*0.45, 3.5, 0, 0, 7); octx.fill();
+  octx.globalAlpha=1;
+  octx.save();
+  octx.translate(Math.round(cx*RES)/RES, Math.round(by*RES)/RES);
+  if(SLIME.face<0) octx.scale(-1,1);
+  octx.imageSmoothingEnabled=false;
+  octx.drawImage(slimeImg, -w/2, -h, w, h);
+  if(SLIME.hitFlash>0){
+    octx.globalAlpha=Math.min(0.85, SLIME.hitFlash*4);
+    octx.fillStyle='#ffffff';
+    octx.fillRect(-w/2, -h, w, h);
+    octx.globalAlpha=1;
+  }
+  octx.restore();
+  // 血条
+  const bw=22, bx=Math.round(cx-bw/2), byy=Math.round(by-h-6);
+  octx.fillStyle='rgba(11,15,26,.75)'; octx.fillRect(bx-1, byy-1, bw+2, 5);
+  octx.fillStyle='#3d1418'; octx.fillRect(bx, byy, bw, 3);
+  octx.fillStyle='#7ed957'; octx.fillRect(bx, byy, Math.max(0, Math.round(bw*(SLIME.hp/SLIME.maxHp))), 3);
+}
+function drawOrbs(){
+  for(const o of orbs){
+    const x=o.x-camX, y=o.y-camY;
+    const ph=Math.sin(gtime*6+o.x)*0.5+0.5;
+    if(o.kind==='xp'){
+      px(x-2, y-2, 4, 4, '#1d4ed8');
+      px(x-1, y-2, 2, 2, '#60a5fa');
+      octx.globalAlpha=0.35+ph*0.4; px(x-3, y-3, 6, 6, '#93c5fd'); octx.globalAlpha=1;
+    } else {
+      px(x-2, y-1, 5, 3, '#b45309');
+      px(x-1, y-2, 3, 4, '#f59e0b');
+      px(x-1, y-2, 1, 1, '#fde68a');
+    }
+  }
+  for(const c of chunks){
+    const a=Math.min(1, c.life/0.6);
+    octx.globalAlpha=a;
+    px(c.x-camX-c.size/2, c.y-camY-c.size/2, c.size, c.size, c.col);
+    octx.globalAlpha=1;
+  }
+  for(const p2 of splats){
+    if(p2.dead){
+      octx.globalAlpha=Math.max(0, p2.deadT/0.5)*0.8;
+      px(p2.x-camX-1, p2.y-camY, 3, 2, '#6bcf4a');
+      octx.globalAlpha=1;
+    } else {
+      px(p2.x-camX-1, p2.y-camY-1, 2, 2, '#8ee06a');
+    }
+  }
+}
+function drawPlayerHurt(){
+  if(playerHurt<=0) return;
+  const a=Math.min(0.45, playerHurt*1.2);
+  octx.globalAlpha=a;
+  octx.fillStyle='#ff2d2d';
+  octx.fillRect(player.x-camX-6, player.y-camY-14, 13, 22);
+  octx.globalAlpha=1;
 }
 function drawInteractMarkers(){
   if(!interactTarget) return;
