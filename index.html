@@ -2113,9 +2113,18 @@ function collectSave(){
 function applySave(s){
   if(!s || s.sig!==SAVE_SIG) return false;
   const p=player;
-  if(s.p){ p.x=s.p.x; p.y=s.p.y; p.hp=s.p.hp; p.maxHp=s.p.maxHp;
-           p.mp=(s.p.mp!=null?s.p.mp:(p.maxMp||30)); p.maxMp=(s.p.maxMp||30); }
+  if(s.p){
+    if(!isFinite(s.p.x)||!isFinite(s.p.y)) return false;
+    p.x=Math.max(0,Math.min(WORLD_W-1,s.p.x));
+    p.y=Math.max(0,Math.min(WORLD_H-1,s.p.y));
+    p.hp=Math.max(0,Math.min(9999, s.p.hp||100));
+    p.maxHp=Math.max(1,Math.min(9999, s.p.maxHp||100));
+    p.mp=Math.max(0,Math.min(9999, s.p.mp!=null?s.p.mp:(p.maxMp||30)));
+    p.maxMp=Math.max(1,Math.min(9999, s.p.maxMp||30));
+  }
   p.speed=120;
+  if(typeof s.lv==='number') s.lv=Math.max(0,Math.min(9999,s.lv));
+  if(typeof s.xp==='number') s.xp=Math.max(0,Math.min(1e9,s.xp));
   if(!isFinite(p.x)||!isFinite(p.y)||solidAt(p.x,p.y)){ p.x=680; p.y=448; }
   level=s.lv||0; xp=s.xp||0; xpNeed=s.need||100;
   if(!(xpNeed>=100)) xpNeed=100;
@@ -2149,11 +2158,22 @@ function applySave(s){
   return true;
 }
 function saveGame(){
-  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(collectSave())); }catch(e){}
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(collectSigned())); }catch(e){}
   if(typeof saveMsgT!=='undefined') saveMsgT=gtime;
 }
 function loadGame(){
   try{
+    {
+      const raw=localStorage.getItem(SAVE_KEY);
+      if(raw && raw.indexOf('"h"')>=0){
+        const o=JSON.parse(raw);
+        const cp=Object.assign({}, o); delete cp.h;
+        if(o.h && saveHash(JSON.stringify(cp))!==o.h){
+          localStorage.removeItem(SAVE_KEY);
+          return false;
+        }
+      }
+    }
     const raw=localStorage.getItem(SAVE_KEY);
     if(!raw) return false;
     return applySave(JSON.parse(raw));
@@ -2179,9 +2199,31 @@ function readSaveFile(file){
   };
   r.readAsText(file);
 }
-function makeSaveCode(){ return btoa(unescape(encodeURIComponent(JSON.stringify(collectSave())))); }
+const SAVE_SALT='xingchen-echo-2026-m1';
+function saveHash(str){
+  let h=2166136261>>>0;
+  for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619)>>>0; }
+  let g=0;
+  const salted=str+'|'+SAVE_SALT;
+  for(let i=0;i<salted.length;i++){ g=(Math.imul(g,31)+salted.charCodeAt(i))>>>0; }
+  return h.toString(36)+'.'+g.toString(36);
+}
+function collectSigned(){
+  const o=collectSave();
+  o.h=saveHash(JSON.stringify(o));
+  return o;
+}
+function makeSaveCode(){ return btoa(unescape(encodeURIComponent(JSON.stringify(collectSigned())))); }
 function useSaveCode(code){
-  try{ return applySave(JSON.parse(decodeURIComponent(escape(atob(code.trim()))))); }
+  try{
+    const o=JSON.parse(decodeURIComponent(escape(atob(code.trim()))));
+    if(o && o.h){
+      const raw=Object.assign({}, o); delete raw.h;
+      if(saveHash(JSON.stringify(raw))!==o.h){ alert('存档码校验失败：内容可能被修改过'); return false; }
+      delete o.h;
+    }
+    return applySave(o);
+  }
   catch(e){ return false; }
 }
 
