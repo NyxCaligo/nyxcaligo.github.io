@@ -2198,29 +2198,47 @@ function drawForestBridge(){
 }
 function drawForestWaterFull(sx,sy,tx,ty){
   octx.fillStyle='#2f6fb0'; octx.fillRect(sx,sy,TILE,TILE);
-  octx.fillStyle='#357cbf'; octx.fillRect(sx,sy,TILE,2);
-  const h=hash(tx*3+1,ty*5+2);
-  octx.fillStyle='#4a8fd4';
-  if(h>0.5){ octx.fillRect(sx+3,sy+6,5,1); octx.fillRect(sx+9,sy+12,4,1); }
-  else { octx.fillRect(sx+5,sy+9,6,1); }
-}
-function drawForestWaterEdge(sx,sy,tx,ty){
-  drawForestGrass(sx,sy,tx,ty);
-  for(let j=0;j<8;j++) for(let i=0;i<8;i++){
-    if(waterMask[(ty*8+j)*MW+(tx*8+i)]){
-      const deep = (i>0&&i<7&&j>0&&j<7);
-      px(sx+i*2, sy+j*2, 2, 2, deep?'#2f6fb0':'#4a90cf');
+  // 波光按"世界坐标"取样，跨格连续，不会出现格子接缝
+  for(let j=0;j<TILE;j+=2){
+    for(let i=0;i<TILE;i+=2){
+      const wx=tx*TILE+i, wy=ty*TILE+j;
+      const n=hash(wx>>1, wy>>1);
+      if(n>0.93){ px(sx+i, sy+j, 4, 1, '#3f86c9'); }
+      else if(n>0.88){ px(sx+i, sy+j, 2, 1, '#4a90cf'); }
     }
   }
 }
+function drawForestWaterEdge(sx,sy,tx,ty){
+  drawForestGrass(sx,sy,tx,ty);
+  const isW=(tx2,ty2)=> (tx2<0||ty2<0||tx2>=FW||ty2>=FH)?0:waterMask[(ty2*8+0)*MW+(tx2*8+0)];
+  for(let j=0;j<8;j++) for(let i=0;i<8;i++){
+    if(!waterMask[(ty*8+j)*MW+(tx*8+i)]) continue;
+    // 判断这个 2px 格子离岸边有多近
+    let near=0;
+    for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]){
+      const ii=i+dx, jj=j+dy;
+      let onWater;
+      if(ii<0||ii>7||jj<0||jj>7){
+        const gx=tx+(ii<0?-1:ii>7?1:0), gy=ty+(jj<0?-1:jj>7?1:0);
+        const mi=((gy*8+((jj+8)%8))*MW + (gx*8+((ii+8)%8)));
+        onWater = (gx>=0&&gy>=0&&gx<FW&&gy<FH) ? waterMask[mi] : 0;
+      } else {
+        onWater = waterMask[(ty*8+jj)*MW+(tx*8+ii)];
+      }
+      if(!onWater) near++;
+    }
+    const col = near>=2 ? '#5aa2e0' : (near===1 ? '#4a90cf' : '#357cbf');
+    px(sx+i*2, sy+j*2, 2, 2, col);
+  }
+}
 function drawForestRoadFull(sx,sy,tx,ty){
-  const h=hash(tx*5+2,ty*7+3);
-  octx.fillStyle = h<0.5 ? '#8a6b45' : '#96774d';
-  octx.fillRect(sx,sy,TILE,TILE);
-  octx.fillStyle='#7b5e3c';
-  if(h>0.62) octx.fillRect(sx+3,sy+6,3,2);
-  octx.fillStyle='#a2875c';
-  if(h<0.3) octx.fillRect(sx+9,sy+4,2,2);
+  octx.fillStyle='#8f7049'; octx.fillRect(sx,sy,TILE,TILE);
+  for(let j=0;j<TILE;j+=2) for(let i=0;i<TILE;i+=2){
+    const wx=tx*TILE+i, wy=ty*TILE+j;
+    const n=hash((wx>>1)+13,(wy>>1)+7);
+    if(n>0.90) px(sx+i, sy+j, 3, 1, '#7b5e3c');
+    else if(n<0.08) px(sx+i, sy+j, 2, 1, '#a2875c');
+  }
 }
 function drawForestRoadEdge(sx,sy,tx,ty){
   drawForestGrass(sx,sy,tx,ty);
