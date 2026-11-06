@@ -328,7 +328,7 @@
   #craftWrap .bag-view { flex:0 0 auto; min-height:120px; }
   .col-slot.dim { opacity:.55; }
   .shop-scrollwrap { position:relative; width:100%; }
-  .shop-view { max-height:132px; overflow-y:auto; touch-action:none; padding-right:16px; }
+  .shop-view { max-height:96px; overflow-y:auto; touch-action:none; padding-right:16px; }
   .shop-grid { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; align-content:flex-start; }
   .shop-slot { width:38px; height:38px; background:#2b1c10; border:1px solid #1a120a;
                box-shadow:inset 0 2px 0 #4a3524; display:flex; align-items:center; justify-content:center;
@@ -538,9 +538,9 @@
   </div>
 </div>
 <div id="errBox" style="position:fixed;left:50%;bottom:60px;transform:translateX(-50%);z-index:99;display:none;max-width:86vw;padding:8px 12px;background:rgba(120,20,20,.92);color:#fff;font-size:11px;border:1px solid #f87171"></div>
-<div id="shopWrap" class="modal hidden" style="z-index:20; align-items:flex-start; padding-top:10vh;">
+<div id="shopWrap" class="modal hidden" style="z-index:20; align-items:flex-start; padding-top:3vh;">
   <div class="modal-bg" id="shopBg"></div>
-  <div class="modal-box" style="width:min(330px,86vw); padding:14px;background:linear-gradient(180deg,#5a3f28,#3a2818);border:2px solid #2b1c10;box-shadow:inset 0 2px 0 #7a5636, 0 6px 0 #1a120a, 0 0 18px rgba(0,0,0,.5)">
+  <div class="modal-box" style="width:min(330px,86vw); padding:12px; max-height:88vh; overflow:auto; background:linear-gradient(180deg,#5a3f28,#3a2818);border:2px solid #2b1c10;box-shadow:inset 0 2px 0 #7a5636, 0 6px 0 #1a120a, 0 0 18px rgba(0,0,0,.5)">
     <div class="panel-head">
       <span class="pixlabel" id="shopTitle" style="color:#f5e6cf"></span>
       <button class="xBtn" id="shopClose">✕</button>
@@ -1878,6 +1878,7 @@ function render(){
   for(const d of ds){ if(d.bottom<=player.y) d.draw(); }
   drawHero();
   for(const d of ds){ if(d.bottom>player.y) d.draw(); }
+  drawInteractMarkers();
   drawDmgNums();
   drawHUD();
   if(showFps){ const ft=fpsVal+' FPS'; drawText(ft, 4, 41, '#4ade80'); }
@@ -3973,15 +3974,6 @@ function drawAmbient(){
       px(sx+9-ph*2, sy+11, 2,1,'#5fa8e6');
     }
   }
-  if(interactTarget && interactTarget.k==='npc'){
-    let tx2=NPC.x, ty2=NPC.y;
-    if(interactTarget.npc==='elder'){ tx2=ELDER.x; ty2=ELDER.y; }
-    else if(interactTarget.npc==='officer'){ tx2=OFFICER.x; ty2=OFFICER.y; }
-    const bx=Math.round(tx2-camX), by=Math.round(ty2-camY);
-    octx.strokeStyle='rgba(255,255,255,.85)'; octx.lineWidth=1;
-    octx.strokeRect(bx-8, by-14, 17, 25);
-    drawStar(bx, by-30, interactTarget.npc==='erin'?1:0.8);
-  }
   for(let i=0;i<14;i++){
     const fx=hash(i,7)*WORLD_W + Math.sin(gtime*0.15+i)*30;
     const fy=hash(i,13)*WORLD_H + Math.cos(gtime*0.12+i*1.7)*24;
@@ -4089,26 +4081,26 @@ document.getElementById('tlImport').onclick=()=>{
 const NPC_NAME='艾琳';
 const TOWN_NAME='星落镇';
 const DLG_DATA={
-  start:{name:NPC_NAME, who:'npc', text:'你是外地人吧。', choices:[
+  start:{name:NPC_NAME+' · 平民', who:'npc', text:'你是外地人吧。', choices:[
     {label:'不然呢？', next:'rude'},
     {label:'这是哪？', next:'where'}
   ]},
-  rude:{name:NPC_NAME, who:'npc', text:'你会用上这个的。', give:'woodsword'},
-  where:{name:NPC_NAME, who:'npc', text:'我从小就在这里长大，'+TOWN_NAME+'。这里很久没有外地人来了。', next:'quest'},
-  quest:{name:NPC_NAME, who:'npc', text:'你需要先去杀死一些怪物，提升一些等级，让自己更强大。', next:'quest2'},
+  rude:{name:NPC_NAME+' · 平民', who:'npc', text:'你会用上这个的。', give:'woodsword'},
+  where:{name:NPC_NAME+' · 平民', who:'npc', text:'我从小就在这里长大，'+TOWN_NAME+'。这里很久没有外地人来了。', next:'quest'},
+  quest:{name:NPC_NAME+' · 平民', who:'npc', text:'你需要先去杀死一些怪物，提升一些等级，让自己更强大。', next:'quest2'},
   quest2:{name:'你', who:'hero', text:'接下来呢？', next:'quest3'},
-  quest3:{name:NPC_NAME, who:'npc', text:'收集某些物品，可以制作更强大的装备，不断变强。', choices:[
+  quest3:{name:NPC_NAME+' · 平民', who:'npc', text:'收集某些物品，可以制作更强大的装备，不断变强。', choices:[
     {label:'你会用上这个的', next:'give2'}
   ]},
-  give2:{name:NPC_NAME, who:'npc', text:'……拿着吧，会用上的。', give:'woodsword'},
-  elderIntro:{name:'老店主', who:'elder', text:'我这里是全镇唯一的商店。', choices:[
+  give2:{name:NPC_NAME+' · 平民', who:'npc', text:'……拿着吧，会用上的。', give:'woodsword'},
+  elderIntro:{name:'马尔科 · 商人', who:'elder', text:'我这里是全镇唯一的商店。', choices:[
     {label:'好…好的。', next:'elderEnd2'},
     {label:'明白了。', next:'elderEnd2'},
     {label:'哦。', next:'elderEnd2'}
   ]},
-  elderEnd2:{name:'老店主', who:'elder', text:'有什么需要的可以来我这。', shop:true},
-  elderAgain:{name:'老店主', who:'elder', text:'有什么需要的可以来我这。', shop:true},
-  officerSay:{name:'军官', who:'officer', text:'……'}
+  elderEnd2:{name:'马尔科 · 商人', who:'elder', text:'有什么需要的可以来我这。', shop:true},
+  elderAgain:{name:'马尔科 · 商人', who:'elder', text:'有什么需要的可以来我这。', shop:true},
+  officerSay:{name:'罗兰 · 守卫', who:'officer', text:'……'}
 };
 let storyTalked=false;
 let talking=false, dlgNode=null, dlgFull='', dlgPos=0, dlgDone=false, dlgTimer=null, dlgGiven={};
@@ -4762,6 +4754,28 @@ function hitDummy(){
   sfxHit();
   vibrate(crit?2:1);
   if(crit) try{ sfxCrit(); }catch(e){}
+}
+function drawInteractMarkers(){
+  if(!interactTarget) return;
+  let tx=null, ty=null, isStory=false;
+  if(interactTarget.k==='npc'){
+    if(interactTarget.npc==='erin'){ tx=NPC.x; ty=NPC.y; isStory=true; }
+    else if(interactTarget.npc==='elder'){ tx=ELDER.x; ty=ELDER.y; }
+    else if(interactTarget.npc==='officer'){ tx=OFFICER.x; ty=OFFICER.y; }
+  }
+  if(tx===null) return;
+  const bx=Math.round(tx-camX), by=Math.round(ty-camY);
+  octx.strokeStyle='rgba(255,255,255,.85)'; octx.lineWidth=1;
+  octx.strokeRect(bx-8, by-14, 17, 25);
+  if(isStory){
+    // 剧情 NPC：金色感叹号
+    px(bx-4, by-32, 9, 12, '#0b0f1a');
+    px(bx-3, by-31, 7, 10, '#f5c542');
+    px(bx, by-29, 1, 5, '#0b0f1a');
+    px(bx, by-23, 1, 1, '#0b0f1a');
+  } else {
+    drawStar(bx, by-32, 1);
+  }
 }
 function drawStar(cx,cy,k){
   const s2=k||1;
