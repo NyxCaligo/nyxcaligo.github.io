@@ -1212,11 +1212,21 @@ function buildForestWorld(){
   for(let y=lakeY-lakeR;y<=lakeY+lakeR;y++) for(let x=lakeX-lakeR;x<=lakeX+lakeR;x++){
     if(x<3||y<3||x>=FW-3||y>=FH-3) continue;
     const d=Math.hypot((x-lakeX)*0.92,(y-lakeY)*1.1);
-    const noise=(hash(x*5+11,y*3+7)-0.5)*3.4
-              + Math.sin(x*0.55+lakeY)*1.5
-              + Math.cos(y*0.47+lakeX)*1.5
-              + (hash(x*13+3,y*17+9)-0.5)*2.0;
+    const noise=(hash(x*5+11,y*3+7)-0.5)*1.6
+              + Math.sin(x*0.42+lakeY)*1.1
+              + Math.cos(y*0.38+lakeX)*1.1;
     if(d<lakeR+noise) water[y*FW+x]=1;
+  }
+  // 湖泊/河流修补：填洞 + 去孤岛
+  for(let pass=0;pass<2;pass++){
+    const copy=water.slice();
+    for(let y=2;y<FH-2;y++) for(let x=2;x<FW-2;x++){
+      const i=y*FW+x;
+      let n=0;
+      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ if(!dx&&!dy) continue; if(copy[(y+dy)*FW+(x+dx)]) n++; }
+      if(!copy[i] && n>=6) water[i]=1;      // 洞填满
+      if(copy[i] && n<=1) water[i]=0;       // 孤岛水去掉
+    }
   }
   // 土路
   const path=[[5,76],[26,76],[48,74],[Math.round(riverX(76)),76],[92,78],[112,76],[122,76]];
@@ -4684,12 +4694,16 @@ const mctx=miniCanvas.getContext('2d');
 function miniAlive(){
   try{
     probeCtx.clearRect(0,0,1,1);
-    probeCtx.drawImage(miniCanvas, 30, 20, 1, 1, 0, 0, 1, 1);
+    probeCtx.drawImage(miniCanvas, Math.max(1,Math.floor(WCOLS/2)), Math.max(1,Math.floor(WROWS/2)), 1, 1, 0, 0, 1, 1);
     const d=probeCtx.getImageData(0,0,1,1).data;
     return d[3] > 0;
   }catch(e){ return true; }
 }
 function buildMini(){
+  if(miniCanvas.width!==WCOLS || miniCanvas.height!==WROWS){
+    miniCanvas.width=WCOLS; miniCanvas.height=WROWS;
+  }
+  mctx.clearRect(0,0,WCOLS,WROWS);
   for(let y=0;y<WROWS;y++) for(let x=0;x<WCOLS;x++){
     const t=world[y][x];
     let c;
@@ -4853,7 +4867,11 @@ function drawMini(){
   const on = showMini && (state==='city');
   cv.classList.toggle('hidden', !on);
   if(!on) return;
-  try{ cv.style.width='88px'; cv.style.height='88px'; }catch(e){}
+  const wsize = miniBig ? 88 : 30;
+  try{
+    cv.style.transition='width .22s cubic-bezier(.2,.9,.3,1), height .22s cubic-bezier(.2,.9,.3,1)';
+    cv.style.width=wsize+'px'; cv.style.height=wsize+'px';
+  }catch(e){}
   miniCheckTick++;
   if(miniCheckTick%300===0 && !miniAlive()){ try{ buildMini(); }catch(e){} }
   const g=cv.getContext('2d');
