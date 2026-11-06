@@ -3509,16 +3509,23 @@ document.getElementById('quadBtn').onclick=()=>{
   }catch(e){}
   if(typeof updateHudButtons==='function') updateHudButtons();
 };
-function quadBurst(btn){
+const BURST_BLUE=['#7cc0ff','#a9d6ff','#ffffff','#5b9ee6'];
+const BURST_COLS={
+  bag:['#f5c542','#ffe9a8','#c9a227','#ffffff'],
+  craft:['#9aa5b1','#d7dee8','#6b7480','#ffffff'],
+  col:['#2f7d4a','#7bd39a','#b8e6c8','#eafff2'],
+  char:['#8b5cf6','#c4b5fd','#6b4a9a','#f3e8ff']
+};
+function burstAt(btn, cols, ringCol){
   try{
     const r=btn.getBoundingClientRect();
     const cx=r.left+r.width/2, cy=r.top+r.height/2;
     const ring=document.createElement('div');
     ring.className='quad-ring';
     ring.style.left=cx+'px'; ring.style.top=cy+'px';
+    if(ringCol) ring.style.borderColor=ringCol;
     document.body.appendChild(ring);
     setTimeout(()=>{ try{ ring.remove(); }catch(err){} }, 560);
-    const cols=['#f5c542','#7cc0ff','#ffffff','#a9d6ff'];
     for(let i=0;i<9;i++){
       const p=document.createElement('div');
       p.className='quad-spark';
@@ -3534,6 +3541,24 @@ function quadBurst(btn){
     }
   }catch(e){}
 }
+function quadBurst(btn){
+  const key=btn && btn.dataset ? btn.dataset.p : '';
+  const cols=BURST_COLS[key]||BURST_BLUE;
+  burstAt(btn, cols, cols[0]);
+}
+// 其他主按钮也加上同款动效
+function attachBurst(id, cols){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.addEventListener('pointerdown', ()=>{ burstAt(el, cols||BURST_BLUE, (cols||BURST_BLUE)[0]); }, {passive:true});
+}
+try{
+  attachBurst('quadBtn', BURST_BLUE);
+  attachBurst('eqToggle', BURST_BLUE);
+  attachBurst('menuBtn', BURST_BLUE);
+  attachBurst('atkBtn', ['#fb7185','#fecdd3','#ffffff','#e11d48']);
+  attachBurst('interactBtn', ['#f5c542','#ffe9a8','#ffffff','#c9a227']);
+}catch(e){}
 document.querySelectorAll('#quadItems button').forEach(b=>{
   b.onclick=(e)=>{
     e.stopPropagation();
