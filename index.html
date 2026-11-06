@@ -158,6 +158,9 @@
   .col-tabs button { flex:1; padding:8px 0; font-size:13px; background:#4b5462; color:#cbd5e1;
                      border:2px solid #0b0f1a; border-radius:0; box-shadow:none; }
   .col-tabs button.on { background:#f5c542; color:#3b2a1c; border-color:#8a6a1a; }
+  #recipeWrap .modal-bg { background:transparent; }
+  #recipeWrap .modal-box { background:linear-gradient(180deg,#3b414b,#262b33); border-color:#5b6472;
+    box-shadow:0 0 0 2px #141821, 0 0 18px rgba(140,150,165,.25); }
   #bagWrap .modal-box { background:linear-gradient(180deg,#3a3524,#26220f); border-color:#8a6a1f;
     box-shadow:0 0 0 2px #1c1708, 0 0 20px rgba(245,197,66,.25); }
   #bagWrap .panel-head .pixlabel { color:#ffe9a8; }
@@ -535,15 +538,15 @@
     <button id="redeemCancel" class="sp-full sp-alt">取消</button>
   </div>
 </div>
-<div id="recipeWrap" class="modal hidden" style="z-index:14; align-items:flex-start; padding-top:10vh;">
+<div id="recipeWrap" class="modal hidden" style="z-index:24; align-items:flex-start; padding-top:8vh; background:transparent; pointer-events:none;">
   <div class="modal-bg" id="recipeBg"></div>
-  <div class="modal-box" style="width:min(280px,78vw); padding:14px">
+  <div class="modal-box" style="width:min(280px,78vw); padding:14px; pointer-events:auto">
     <div class="panel-head">
       <span class="pixlabel" id="recipeTitle"></span>
       <button class="xBtn" id="recipeClose">✕</button>
     </div>
     <div id="recipeBody" style="width:100%"></div>
-    <button id="recipeCraft" class="sp-full"><svg width="16" height="16" viewBox="0 0 12 12" shape-rendering="crispEdges" style="vertical-align:-3px;margin-right:6px"><rect x="5" y="1" width="2" height="6" fill="#e2e8f0"/><rect x="3" y="5" width="6" height="2" fill="#e2e8f0"/><rect x="4" y="7" width="4" height="1" fill="#94a3b8"/><rect x="4" y="9" width="4" height="2" fill="#cbd5e1"/></svg>合成</button>
+    <button id="recipeCraft" class="sp-full" style="background:linear-gradient(180deg,#6b7480,#474e59);border-color:#1a1f27;color:#f1f5f9"><svg width="16" height="16" viewBox="0 0 12 12" shape-rendering="crispEdges" style="vertical-align:-3px;margin-right:6px"><rect x="5" y="1" width="2" height="6" fill="#e2e8f0"/><rect x="3" y="5" width="6" height="2" fill="#e2e8f0"/><rect x="4" y="7" width="4" height="1" fill="#94a3b8"/><rect x="4" y="9" width="4" height="2" fill="#cbd5e1"/></svg>合成</button>
   </div>
 </div>
 <div id="charWrap" class="modal hidden" style="z-index:11; align-items:flex-start; justify-content:flex-start; padding-top:8px;">
@@ -1173,6 +1176,8 @@ function solidAt(px,py){
   if(Math.hypot(px-ELDER.x, py-ELDER.y) < 7) return true;
   if(Math.hypot(px-OFFICER.x, py-OFFICER.y) < 7) return true;
   if(Math.hypot(px-DUMMY.x, py-DUMMY.y) < 7) return true;
+  // 复活石台（泉水）
+  if(px>REVIVE_POINT.x-12 && px<REVIVE_POINT.x+12 && py>REVIVE_POINT.y-8 && py<REVIVE_POINT.y+4) return true;
   if(waterAt(px,py)) return true;
   return false;
 }
@@ -3414,6 +3419,7 @@ function renderChar(){
     ['法力值', Math.floor(player.mp||0)+' / '+(player.maxMp||30)],
     ['回蓝速度', '0.25 / 秒（每 4 秒 1 点）'],
     ['受击退值', String(PLAYER_WEIGHT)],
+    ['下一级成长', '生命 +5%　法力 +5%（×1.05）'],
     ['护甲值', sb.armor+(sb.bonus?' + '+sb.bonus+'（套装）':'')+' = '+sb.total],
   ];
   for(const [k,v] of rows){
@@ -3644,7 +3650,7 @@ document.getElementById('recipeCraft').onclick=(e)=>{
   let maxN=99;
   for(const k in r.need) maxN=Math.min(maxN, Math.floor(matCount(k)/r.need[k]));
   if(maxN<1){ toastMsg('材料不足'); return; }
-  qty=Math.min(qty, maxN);
+  if(qty>maxN){ toastMsg('材料不足（最多 '+maxN+' 个）'); sfxBeep(); return; }
   for(const k in r.need) removeItem(k, r.need[k]*qty);
   addItem(r.out, qty);
   sfxEquip(); vibrate(3);
@@ -5276,40 +5282,88 @@ function updateSlime(dt){
   }
   separateSlimes();
 }
-// ---------- 流场寻路（一次 BFS 供所有怪物使用） ----------
+// ---------- 流场寻路：加权（道路更快）+ 8 方向 ----------
 let flowDist=null, flowTile=-1, flowT=0;
 function tilePassable(tx,ty){
   if(tx<1||ty<1||tx>=WCOLS-1||ty>=WROWS-1) return false;
   return !solidAt(tx*TILE+TILE/2, ty*TILE+TILE/2);
 }
+function tileCost(tx,ty){
+  const i=ty*WCOLS+tx;
+  let c=1;
+  if(tileRoadCnt[i]>24) c=0.72;      // 道路更好走
+  if(tileWaterCnt[i]>0) c=3.2;       // 水边不好走
+  return c;
+}
 function computeFlow(px,py){
-  const W=WCOLS, H=WROWS;
-  flowDist=new Int32Array(W*H).fill(-1);
+  const W=WCOLS, H=WROWS, N=W*H;
+  if(!flowDist || flowDist.length!==N) flowDist=new Float32Array(N);
+  flowDist.fill(1e9);
   let sx=Math.floor(px/TILE), sy=Math.floor(py/TILE);
   if(!tilePassable(sx,sy)){
     let found=false;
-    for(let r=1;r<=4 && !found;r++){
-      for(let dy=-r;dy<=r && !found;dy++) for(let dx=-r;dx<=r && !found;dx++){
-        if(tilePassable(sx+dx,sy+dy)){ sx+=dx; sy+=dy; found=true; }
+    for(let r=1;r<=5 && !found;r++){
+      for(let dyy=-r;dyy<=r && !found;dyy++) for(let dxx=-r;dxx<=r && !found;dxx++){
+        if(tilePassable(sx+dxx,sy+dyy)){ sx+=dxx; sy+=dyy; found=true; }
       }
     }
     if(!found) return;
   }
   const start=sy*W+sx;
   flowDist[start]=0;
-  const q=new Int32Array(W*H); let head=0, tail=0;
-  q[tail++]=start;
-  while(head<tail){
-    const cur=q[head++];
+  // 二叉小顶堆
+  const heapI=new Int32Array(N*4), heapD=new Float32Array(N*4);
+  let heapN=0;
+  const push=(idx,d)=>{
+    let i=heapN++;
+    heapI[i]=idx; heapD[i]=d;
+    while(i>0){
+      const p=(i-1)>>1;
+      if(heapD[p]<=heapD[i]) break;
+      const ti=heapI[p], td=heapD[p];
+      heapI[p]=heapI[i]; heapD[p]=heapD[i];
+      heapI[i]=ti; heapD[i]=td;
+      i=p;
+    }
+  };
+  const pop=()=>{
+    const top=heapI[0];
+    heapN--;
+    if(heapN>0){
+      heapI[0]=heapI[heapN]; heapD[0]=heapD[heapN];
+      let i=0;
+      for(;;){
+        const l=i*2+1, r=l+1;
+        let m=i;
+        if(l<heapN && heapD[l]<heapD[m]) m=l;
+        if(r<heapN && heapD[r]<heapD[m]) m=r;
+        if(m===i) break;
+        const ti=heapI[m], td=heapD[m];
+        heapI[m]=heapI[i]; heapD[m]=heapD[i];
+        heapI[i]=ti; heapD[i]=td;
+        i=m;
+      }
+    }
+    return top;
+  };
+  push(start,0);
+  const dirs=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+  while(heapN>0){
+    const cur=pop();
     const cx=cur%W, cy=(cur-cx)/W;
-    const d=flowDist[cur]+1;
-    for(let k=0;k<4;k++){
-      const nx=cx+(k===0?1:k===1?-1:0), ny=cy+(k===2?1:k===3?-1:0);
+    const cd=flowDist[cur];
+    for(const [dx2,dy2] of dirs){
+      const nx=cx+dx2, ny=cy+dy2;
       if(nx<1||ny<1||nx>=W-1||ny>=H-1) continue;
-      const ni=ny*W+nx;
-      if(flowDist[ni]!==-1) continue;
       if(!tilePassable(nx,ny)) continue;
-      flowDist[ni]=d; q[tail++]=ni;
+      if(dx2&&dy2 && (!tilePassable(cx+dx2,cy) || !tilePassable(cx,cy+dy2))) continue;
+      const step=(dx2&&dy2?1.4142:1)*tileCost(nx,ny);
+      const nd=cd+step;
+      const ni=ny*W+nx;
+      if(nd<flowDist[ni]-1e-4){
+        flowDist[ni]=nd;
+        push(ni,nd);
+      }
     }
   }
 }
@@ -5319,14 +5373,14 @@ function flowStep(s){
   const tx=Math.floor(s.x/TILE), ty=Math.floor(s.y/TILE);
   if(tx<0||ty<0||tx>=WCOLS||ty>=WROWS) return null;
   const cur=flowDist[ty*W+tx];
-  let best=null, bestD=cur===-1?1e9:cur;
-  for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
-    if(!dx && !dy) continue;
-    const nx=tx+dx, ny=ty+dy;
+  let best=null, bestD=cur>=1e8?1e9:cur;
+  for(let dy2=-1;dy2<=1;dy2++) for(let dx2=-1;dx2<=1;dx2++){
+    if(!dx2 && !dy2) continue;
+    const nx=tx+dx2, ny=ty+dy2;
     if(nx<1||ny<1||nx>=WCOLS||ny>=WROWS) continue;
-    if(dx&&dy && (!tilePassable(tx+dx,ty) || !tilePassable(tx,ty+dy))) continue;
+    if(dx2&&dy2 && (!tilePassable(tx+dx2,ty) || !tilePassable(tx,ty+dy2))) continue;
     const v=flowDist[ny*W+nx];
-    if(v===-1) continue;
+    if(v>=1e8) continue;
     if(v<bestD){ bestD=v; best={x:nx*TILE+TILE/2, y:ny*TILE+TILE/2}; }
   }
   return best;
