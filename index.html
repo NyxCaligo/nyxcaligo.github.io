@@ -125,7 +125,7 @@
               box-shadow:inset 0 1px 0 #4a7ab5, 0 3px 0 #0b2545; font-size:12px; gap:5px;
               display:flex; align-items:center; justify-content:center; }
   #eqLabel { font-size:12px; letter-spacing:1px; }
-  #eqToggle, #bagBtn { display:none; }
+  #eqToggle, #bagBtn, #atkBtn, #interactBtn { display:none; }
   #atkBtn { position:fixed; z-index:11; right:8%; bottom:22%; width:76px; height:76px; padding:0;
             background:#2b4a72; border:3px solid #0b2545; border-radius:0;
             box-shadow:inset 0 3px 0 #4a7ab5, inset 0 -3px 0 #16283f, 0 4px 0 #0b2545;
@@ -273,6 +273,12 @@
     100% { transform:translate(var(--dx),var(--dy)) scale(.25); opacity:0 }
   }
   .modal:not(.hidden) .modal-box { animation:panelPop .18s cubic-bezier(.2,1.3,.4,1); }
+  #equipWrap:not(.hidden) .eq-box { animation:equipBurst .34s cubic-bezier(.16,1.4,.34,1); transform-origin:50% 100%; }
+  @keyframes equipBurst {
+    0%   { transform:translateY(26px) scale(.72); opacity:0; filter:brightness(1.6); }
+    55%  { transform:translateY(-4px) scale(1.04); opacity:1; filter:brightness(1.1); }
+    100% { transform:translateY(0) scale(1); opacity:1; filter:none; }
+  }
   @keyframes panelPop { 0%{ transform:scale(.96) translateY(6px); opacity:.6 } 100%{ transform:none; opacity:1 } }
   #charBtn { position:fixed; z-index:12; left:calc(10px + env(safe-area-inset-left, 0px));
              bottom:calc(172px + env(safe-area-inset-bottom, 0px)); width:46px; height:46px; padding:0;
@@ -733,6 +739,7 @@
       <span class="pixlabel" id="eqTitle"></span>
       <button class="xBtn" id="eqClose">✕</button>
     </div>
+    <div id="eqArmorLine" style="width:100%;text-align:center;font-size:11px;color:#bfdbfe;padding:4px 0 6px">护甲 0　减伤 0</div>
     <div class="eq-cols">
       <div class="eq-col">
         <div class="eq-cap pixlabel" id="capW"></div>
@@ -2271,6 +2278,25 @@ function showFatal(msg){
   }catch(e){}
 }
 window.addEventListener('error', (e)=>{ showFatal(e.message||'unknown'); });
+function enableInstantTap(idList){
+  for(const id of idList){
+    const el=document.getElementById(id);
+    if(!el || !el.onclick) continue;
+    const fn=el.onclick;
+    let last=0;
+    const guarded=(e)=>{
+      const now=Date.now();
+      if(now-last<300) return;
+      last=now;
+      try{ fn(e); }catch(err){ try{ showFatal(err.message); }catch(e2){} }
+    };
+    el.onclick=guarded;
+    el.addEventListener('pointerdown', (e)=>{
+      if(e.target && e.target.closest && e.target.closest('input,textarea')) return;
+      guarded(e);
+    }, {passive:true});
+  }
+}
 function frame(now){
   const dt=Math.min((now-last)/1000,0.05); last=now;
   if(!paused) gtime += dt;
@@ -3166,6 +3192,11 @@ function renderBag(){
   setTimeout(updateBagScroll, 0);
 }
 function renderEquipPanel(){
+  try{
+    const a=playerArmorTotal();
+    const el=document.getElementById('eqArmorLine');
+    if(el) el.textContent='护甲 '+a+'　减伤 '+Math.floor(a/2)+' 点/次';
+  }catch(e){}
   const mk=(t,i,empty)=>{
     const d=document.createElement('div'); d.className='eq-slot';
     d.style.position='relative';
@@ -3376,6 +3407,17 @@ setPixLabel('capAcc','饰品',12,'#94a3b8');
 
 let equipOpenAt=0, bagOpenAt=0;
 function openEquip(){
+  try{
+    const L=equipLayout();
+    const sx=8+(L.swx+VW), sy=0; // 占位
+  }catch(e){}
+  try{
+    // 从装备栏右端按钮喷发
+    const L=equipLayout();
+    const bx=(L.swx+L.swordW/2)*cssScale + oxCss;
+    const by=(L.swy+L.swordH/2)*cssScale + oyCss;
+    burstAtPoint(bx, by, ['#7cc0ff','#a9d6ff','#ffffff','#5b9ee6']);
+  }catch(e){}
   equipOpenAt=performance.now();
   closeAllPanels('equipWrap');
   renderEquipPanel();
@@ -3682,6 +3724,29 @@ const BURST_COLS={
   col:['#2f7d4a','#7bd39a','#b8e6c8','#eafff2'],
   char:['#8b5cf6','#c4b5fd','#6b4a9a','#f3e8ff']
 };
+function burstAtPoint(cx, cy, cols, ringCol){
+  try{
+    const ring=document.createElement('div');
+    ring.className='quad-ring';
+    ring.style.left=cx+'px'; ring.style.top=cy+'px';
+    if(ringCol) ring.style.borderColor=ringCol;
+    document.body.appendChild(ring);
+    setTimeout(()=>{ try{ ring.remove(); }catch(err){} }, 560);
+    for(let i=0;i<10;i++){
+      const p=document.createElement('div');
+      p.className='quad-spark';
+      const a=(Math.PI*2*i)/10 + Math.random()*0.4;
+      const dist=26+Math.random()*26;
+      p.style.left=cx+'px'; p.style.top=cy+'px';
+      p.style.background=cols[i%cols.length];
+      p.style.color=cols[i%cols.length];
+      p.style.setProperty('--dx', (Math.cos(a)*dist).toFixed(1)+'px');
+      p.style.setProperty('--dy', (Math.sin(a)*dist).toFixed(1)+'px');
+      document.body.appendChild(p);
+      setTimeout(()=>{ try{ p.remove(); }catch(err){} }, 520);
+    }
+  }catch(e){}
+}
 function burstAt(btn, cols, ringCol){
   try{
     const r=btn.getBoundingClientRect();
@@ -6536,6 +6601,10 @@ try{
 }catch(e){}
 try{ const bt=document.getElementById('buildTag'); if(bt) bt.textContent='构建 '+BUILD+' · STELLAR ECHO'; }catch(e){}
 try{ const tb=document.getElementById('titleBuildNum'); if(tb) tb.textContent=BUILD; }catch(e){}
+try{
+  enableInstantTap(['menuBtn','eqToggle','devBtn','bagBtn','colBtn','craftBtn','charBtn','quadBtn',
+                    'atkBtn','interactBtn','settingsBtn','pauseGameBtn','mTitle','mClose']);
+}catch(e){}
 try{ checkOrientation(); }catch(e){}
 try{ updateHudButtons(); }catch(e){}
 try{ buildMini(); }catch(e){}
