@@ -327,6 +327,16 @@
   #craftWrap .bag-scrollwrap { flex:1 1 auto; min-height:0; }
   #craftWrap .bag-view { flex:0 0 auto; min-height:120px; }
   .col-slot.dim { opacity:.55; }
+  #reviveBtn { position:fixed; z-index:22; left:50%; top:52%; transform:translate(-50%,-50%);
+               width:150px; height:64px; padding:0; font-size:22px; letter-spacing:4px;
+               background:linear-gradient(180deg,#7cc0ff,#3b82f6); color:#04142c;
+               border:3px solid #0b2545; border-radius:0;
+               box-shadow:inset 0 3px 0 #b8dcff, 0 5px 0 #0b2545, 0 0 24px rgba(96,165,250,.8); }
+  #reviveBtn.hidden { display:none; }
+  #reviveBtn.pop { animation: revivePop .38s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes revivePop { 0%{ transform:translate(-50%,-50%) scale(.2); opacity:0 }
+                         60%{ transform:translate(-50%,-50%) scale(1.12); opacity:1 }
+                         100%{ transform:translate(-50%,-50%) scale(1); opacity:1 } }
   .shop-scrollwrap { position:relative; width:100%; }
   .shop-view { max-height:96px; overflow-y:auto; touch-action:none; padding-right:16px; }
   .shop-grid { display:flex; flex-wrap:wrap; gap:6px; justify-content:center; align-content:flex-start; }
@@ -537,6 +547,7 @@
     <button id="splitCancel" class="sp-full sp-alt">取消</button>
   </div>
 </div>
+<button id="reviveBtn" class="hidden">复活</button>
 <div id="errBox" style="position:fixed;left:50%;bottom:60px;transform:translateX(-50%);z-index:99;display:none;max-width:86vw;padding:8px 12px;background:rgba(120,20,20,.92);color:#fff;font-size:11px;border:1px solid #f87171"></div>
 <div id="shopWrap" class="modal hidden" style="z-index:20; align-items:flex-start; padding-top:3vh;">
   <div class="modal-bg" id="shopBg"></div>
@@ -1108,6 +1119,7 @@ function tryMove(dx,dy){
 
 function update(dt){
   if(inShop){ updateShop(dt); return; }
+  if(dead){ updateSlime(dt); updateOrbs(dt); updateCombatFx(dt); updateFootParts(dt); updateDmgNums(dt); return; }
   let mvx=0, mvy=0;
   if(!talking){
     if(joy.active && Math.hypot(joy.dx,joy.dy)>2){ mvx=joy.dx; mvy=joy.dy; }
@@ -1673,8 +1685,8 @@ function drawCoinIcon(cx,cy,glow){
   px(cx-1, cy-2, 1, 1, '#fde68a');
 }
 function drawCoinHud(){
-  const y=VH-12;
-  const x=10;
+  const y=VH-11;
+  const x=74;
   const tw=Math.abs(Math.sin(gtime*3.2));
   drawCoinIcon(x+4, y+3, tw);
   drawText(String(Math.floor(money)), x+11, y, tw>0.7?'#fff7d6':'#fde68a', 1.4);
@@ -1893,11 +1905,18 @@ function render(){
   if(vis(ELDER.x-8,ELDER.y-20,16,30)) ds.push({bottom:ELDER.y, draw:drawElder});
   if(vis(OFFICER.x-8,OFFICER.y-20,16,30)) ds.push({bottom:OFFICER.y, draw:drawOfficer});
   ds.push({bottom:SHOP_DOOR.y+2, draw:drawShopDoorMark});
+  ds.push({bottom:REVIVE_POINT.y, draw:drawShrine});
   ds.push({bottom:99999, draw:drawGate});
   ds.sort((a,b)=>a.bottom-b.bottom);
   for(const d of ds){ if(d.bottom<=player.y) d.draw(); }
   drawHero();
   for(const d of ds){ if(d.bottom>player.y) d.draw(); }
+  if(dead){
+    octx.globalAlpha=Math.min(0.34, 0.10+deathT*0.08);
+    octx.fillStyle='#b91c1c';
+    octx.fillRect(0,0,VW,VH);
+    octx.globalAlpha=1;
+  }
   drawPlayerHurt();
   drawInteractMarkers();
   drawDmgNums();
@@ -4471,6 +4490,30 @@ let slimeImg=null;
 const SLIME={alive:false, x:0,y:0, hp:20, maxHp:20, dmg:4, r:10, vx:0, vy:0,
              iframe:0, atkCd:0, hitFlash:0, atkAnim:0, wob:0, face:1, hurt:0};
 let playerIframe=0, playerHurt=0, guardTalked=false;
+let dead=false, deathT=0, reviveReady=false;
+const REVIVE_POINT={x:636, y:470};
+function killPlayer(){
+  if(dead) return;
+  dead=true; deathT=0; reviveReady=false;
+  player.hp=0;
+  try{ document.getElementById('reviveBtn').classList.add('hidden'); }catch(e){}
+  sfxHurt(); vibrate(4);
+}
+function doRevive(){
+  if(!dead) return;
+  dead=false; deathT=0; reviveReady=false;
+  player.hp=player.maxHp; player.mp=player.maxMp;
+  player.x=REVIVE_POINT.x; player.y=REVIVE_POINT.y+6; player.face=1;
+  playerIframe=1.2; playerHurt=0;
+  try{ document.getElementById('reviveBtn').classList.add('hidden'); }catch(e){}
+  for(let i=0;i<12;i++){
+    const a=Math.random()*Math.PI*2;
+    splats.push({x:player.x, y:player.y-6, vx:Math.cos(a)*50, vy:-Math.random()*50-10, life:0.9, dead:false});
+  }
+  sfxEquip(); toastMsg('复活了');
+  saveGame();
+  updateHudButtons();
+}
 let orbs=[], chunks=[], splats=[];
 function spawnSlime(){
   SLIME.alive=true; SLIME.hp=SLIME.maxHp=20;
@@ -4509,7 +4552,6 @@ function killSlime(){
     splats.push({x:SLIME.x, y:SLIME.y-8, vx:Math.cos(a)*60, vy:-Math.random()*60-20, life:1.2, dead:false});
   }
   sfxHit();
-  toastMsg('击败了史莱姆');
 }
 
 // ---------- 新 NPC 与店铺 ----------
@@ -4607,6 +4649,34 @@ function drawShopDoorMark(){
   px(x+9, y-19, 8, 1, '#5a3a1f');
   px(x+9, y-17, 6, 1, '#5a3a1f');
 }
+function drawShrine(){
+  const x=Math.round((REVIVE_POINT.x-camX)*RES)/RES, y=Math.round((REVIVE_POINT.y-camY)*RES)/RES;
+  if(x<-40||x>VW+40||y<-60||y>VH+60) return;
+  const pulse=0.5+0.5*Math.sin(gtime*2.2);
+  // 光晕
+  octx.globalAlpha=0.12+pulse*0.10;
+  octx.fillStyle='#9ad7ff';
+  octx.beginPath(); octx.ellipse(x, y+2, 16, 6, 0, 0, 7); octx.fill();
+  octx.globalAlpha=1;
+  // 石台
+  px(x-10, y-4, 20, 6, '#6b7382');
+  px(x-10, y-4, 20, 2, '#8b94a1');
+  px(x-8, y-2, 16, 2, '#59606c');
+  // 立柱
+  px(x-4, y-22, 8, 18, '#7b8390');
+  px(x-4, y-22, 2, 18, '#9aa3ae');
+  px(x+2, y-22, 2, 18, '#5f6672');
+  // 顶部徽记
+  px(x-5, y-26, 10, 4, '#8b94a1');
+  px(x-2, y-25, 4, 2, '#9ad7ff');
+  // 漂浮光点
+  for(let i=0;i<3;i++){
+    const ph=(gtime*0.6+i*0.33)%1;
+    octx.globalAlpha=(1-ph)*0.8;
+    px(x-6+i*5, y-10-ph*14, 1, 1, '#d8f0ff');
+    octx.globalAlpha=1;
+  }
+}
 function drawGate(){
   const gx=1004, gy=470;                 // 贴着右边界墙
   const x=Math.round((gx-camX)*RES)/RES, y=Math.round((gy-camY)*RES)/RES;
@@ -4697,6 +4767,18 @@ function drawGate(){
 function updateSlime(dt){
   if(playerIframe>0) playerIframe=Math.max(0,playerIframe-dt);
   if(playerHurt>0) playerHurt=Math.max(0,playerHurt-dt);
+  if(dead){
+    deathT+=dt;
+    if(deathT>=3 && !reviveReady){
+      reviveReady=true;
+      try{
+        const b=document.getElementById('reviveBtn');
+        b.classList.remove('hidden');
+        b.classList.remove('pop'); void b.offsetWidth; b.classList.add('pop');
+      }catch(e){}
+    }
+    return;
+  }
   if(!SLIME.alive) return;
   if(SLIME.iframe>0) SLIME.iframe=Math.max(0,SLIME.iframe-dt);
   if(SLIME.hitFlash>0) SLIME.hitFlash=Math.max(0,SLIME.hitFlash-dt);
@@ -4721,6 +4803,7 @@ function updateSlime(dt){
     SLIME.atkCd=1.2; SLIME.atkAnim=0.22;
     if(playerIframe<=0 && player.hp>0){
       player.hp=Math.max(0,player.hp-SLIME.dmg);
+      if(player.hp<=0){ killPlayer(); }
       playerIframe=0.4; playerHurt=0.32;
       addDmgNum(player.x, player.y-20, SLIME.dmg, false);
       vibrate(3); sfxHurt();
@@ -5007,13 +5090,10 @@ function drawSlime(){
   px(bx+2, byy+2, 2, 2, HL);
   px(bx+2, byy+4, 1, 1, HL);
   px(bx+w-4, byy+3, 2, 1, HL);
-  // 眼睛
-  const ex1=bx+3, ex2=bx+w-5, ey=byy+Math.round(h*0.42);
-  px(ex1, ey, 3, 3, '#1f3d18'); px(ex2, ey, 3, 3, '#1f3d18');
+  // 眼睛（小）
+  const ex1=bx+3, ex2=bx+w-5, ey=byy+Math.round(h*0.45);
+  px(ex1, ey, 2, 2, '#1f3d18'); px(ex2, ey, 2, 2, '#1f3d18');
   px(ex1, ey, 1, 1, '#ffffff'); px(ex2, ey, 1, 1, '#ffffff');
-  // 嘴
-  px(bx+Math.round(w/2)-2, ey+4, 4, 1, '#1f3d18');
-  px(bx+Math.round(w/2)-1, ey+3, 2, 1, '#1f3d18');
   // 受击闪白
   if(SLIME.hitFlash>0){
     octx.globalAlpha=Math.min(0.8, SLIME.hitFlash*4);
@@ -5264,7 +5344,7 @@ function updateHudButtons(){
   if(db) db.classList.toggle('hidden', hide || !devMode);
 
   const ab=document.getElementById('atkBtn');
-  if(ab) ab.classList.toggle('hidden', hide || equipOpen || bagOpen || talking || inShop);
+  if(ab) ab.classList.toggle('hidden', hide || equipOpen || bagOpen || talking || inShop || dead);
 
   const ib=document.getElementById('interactBtn');
   if(ib){
@@ -5297,6 +5377,8 @@ document.getElementById('startBtn').onclick=()=>{
 
 
 try{
+  const rb=document.getElementById('reviveBtn');
+  if(rb) rb.onclick=()=>{ doRevive(); };
   const sell=document.getElementById('bagSellSel');
   if(sell) sell.onclick=()=>{
     if(!multiSel.size){ toastMsg('先选择要出售的物品'); return; }
