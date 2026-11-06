@@ -3192,6 +3192,7 @@ setPixLabel('capAcc','饰品',12,'#94a3b8');
 let equipOpenAt=0, bagOpenAt=0;
 function openEquip(){
   equipOpenAt=performance.now();
+  closeAllPanels('equipWrap');
   renderEquipPanel();
   document.getElementById('equipWrap').classList.remove('hidden');
 }
@@ -3456,6 +3457,7 @@ function drawCharPortrait(){
 let charOpenAt=0;
 function openChar(){
   charOpenAt=performance.now();
+  closeAllPanels('charWrap');
   document.getElementById('charWrap').classList.remove('hidden');
   renderChar(); updateHudButtons(); sfxBeep();
 }
@@ -3718,7 +3720,7 @@ document.getElementById('splitOk').onclick=()=>{
   toastMsg('已分堆');
 };
 function openCraft(){
-  try{ closeChar(); }catch(e){}
+  closeAllPanels('craftWrap');
   document.getElementById('craftWrap').classList.remove('hidden');
   document.getElementById('craftTitle').textContent='合成';
   const vs=viewSize();
@@ -3743,8 +3745,7 @@ document.getElementById('craftClose').onclick=()=>{ document.getElementById('cra
 document.getElementById('craftBg').onclick=()=>{ document.getElementById('craftWrap').classList.add('hidden'); updateHudButtons(); };
 
 function openCollection(){
-  try{ closeChar(); }catch(e){}
-  document.getElementById('craftWrap').classList.add('hidden');
+  closeAllPanels('colWrap');
   document.getElementById('colWrap').classList.remove('hidden');
   try{ buildColSubs(); }catch(e){}
   bindColScroll();
@@ -4142,8 +4143,30 @@ function bindSort(){
   };
 }
 function closeChar(){ document.getElementById('charWrap').classList.add('hidden'); }
+// 面板互斥：打开任何一个都先关掉其它所有面板
+const PANEL_IDS=['bagWrap','equipWrap','colWrap','craftWrap','charWrap'];
+function closeAllPanels(exceptId){
+  for(const id of PANEL_IDS){
+    if(id===exceptId) continue;
+    const el=document.getElementById(id);
+    if(el && !el.classList.contains('hidden')) el.classList.add('hidden');
+  }
+  if(exceptId!=='bagWrap'){
+    try{
+      if(multiMode || manageMode){
+        multiMode=false; manageMode=false; multiSel.clear();
+        const mb=document.getElementById('bagMultiBtn');
+        if(mb){ mb.classList.remove('on'); mb.textContent='操作'; }
+        const bar=document.getElementById('bagMultiBar');
+        if(bar) bar.classList.add('hidden');
+      }
+    }catch(e){}
+  }
+  try{ updateHudButtons(); }catch(e){}
+}
 function openBag(){
   bagOpenAt=performance.now();
+  closeAllPanels('bagWrap');
   document.getElementById('bagWrap').classList.remove('hidden');
   const vsb=viewSize();
   const bbox=document.querySelector('#bagWrap .modal-box');
