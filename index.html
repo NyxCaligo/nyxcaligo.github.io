@@ -125,6 +125,7 @@
               box-shadow:inset 0 1px 0 #4a7ab5, 0 3px 0 #0b2545; font-size:12px; gap:5px;
               display:flex; align-items:center; justify-content:center; }
   #eqLabel { font-size:12px; letter-spacing:1px; }
+  #eqToggle, #bagBtn { display:none; }
   #atkBtn { position:fixed; z-index:11; right:8%; bottom:22%; width:76px; height:76px; padding:0;
             background:#2b4a72; border:3px solid #0b2545; border-radius:0;
             box-shadow:inset 0 3px 0 #4a7ab5, inset 0 -3px 0 #16283f, 0 4px 0 #0b2545;
@@ -2264,7 +2265,7 @@ function showFatal(msg){
     if(msg===lastErr && now-lastErrAt<3000) return;
     lastErr=msg; lastErrAt=now;
     const d=document.getElementById('errBox');
-    if(d){ d.style.display='block'; d.textContent='⚠ '+msg; }
+    if(d){ d.style.display='block'; d.style.zIndex='999'; d.textContent='⚠ '+errLog.join(' / '); }
     try{ localStorage.setItem('xingchen_err', String(msg).slice(0,300)); }catch(e){}
   }catch(e){}
 }
