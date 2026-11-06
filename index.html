@@ -6468,11 +6468,14 @@ document.getElementById('startBtn').onclick=()=>{
   document.getElementById('menu').classList.add('hidden');
   if(!hasSave) resetGame();
   hasSave=true; saveGame();
-  initAudio(); startMusic(); sfxDrop();
+  try{ initAudio(); startMusic(); }catch(e){ showFatal('audio: '+e.message); }
+  try{ sfxDrop(); }catch(e){}
+  try{ state='arrive'; resize(); }catch(e){ showFatal('resize: '+e.message); }
   if(screen.orientation && screen.orientation.lock){
     try { const p=screen.orientation.lock('landscape'); if(p&&p.catch) p.catch(()=>{}); } catch(e){}
   }
-  state='arrive'; resize(); syncBagBtn(); try{ setMusicMood('town'); }catch(e){}
+  try{ syncBagBtn(); }catch(e){}
+  try{ setMusicMood('town'); }catch(e){}
   const sub=document.getElementById('subtitle');
   sub.classList.remove('hidden');
   setTimeout(()=>{ sub.classList.add('hidden'); state='city'; resize(); syncBagBtn(); }, 1600);
@@ -6517,8 +6520,14 @@ try{
 
 }catch(e){}
 try{ const bt=document.getElementById('buildTag'); if(bt) bt.textContent='构建 '+BUILD+' · STELLAR ECHO'; }catch(e){}
-buildMini(); try{ buildTileCaches(); }catch(e){}
-resetGame(); loadCfg(); hasSave=loadGame(); syncBagBtn();
+try{ checkOrientation(); }catch(e){}
+try{ updateHudButtons(); }catch(e){}
+try{ buildMini(); }catch(e){}
+try{ buildTileCaches(); }catch(e){}
+try{ resetGame(); }catch(e){ showFatal('resetGame: '+e.message); }
+try{ loadCfg(); }catch(e){ showFatal('loadCfg: '+e.message); }
+try{ hasSave=loadGame(); }catch(e){ showFatal('loadGame: '+e.message); }
+try{ syncBagBtn(); }catch(e){ showFatal('syncBagBtn: '+e.message); }
 loadStats();
 stats.sessions++; if(!stats.firstAt) stats.firstAt=Date.now(); saveStats();
 statHit('visits');
