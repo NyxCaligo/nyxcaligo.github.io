@@ -4524,6 +4524,76 @@ function drawGate(){
   octx.globalAlpha=1;
 }
 
+// ---------- 商店内部逻辑 ----------
+function roomSolid(x,y){
+  if(x<18||y<22||x>ROOM.w-18||y>ROOM.h-14) return true;
+  if(y>30 && y<52 && x>22 && x<ROOM.w-22) return true;
+  return false;
+}
+function centerRoomCam(){
+  camX = -Math.round((VW-ROOM.w)/2);
+  camY = -Math.round((VH-ROOM.h)/2);
+  camXs=camX; camYs=camY;
+}
+function enterShop(){
+  if(inShop) return;
+  townPos={x:player.x, y:player.y};
+  inShop=true;
+  player.x=ROOM.w/2; player.y=ROOM.h-24; player.face=1;
+  attacking=0; atkCd=0;
+  try{ closeBag();
+       document.getElementById('craftWrap').classList.add('hidden');
+       document.getElementById('colWrap').classList.add('hidden');
+       closeChar(); }catch(e){}
+  centerRoomCam();
+  sfxEquip(); toastMsg('进入商店');
+}
+function exitShop(){
+  if(!inShop) return;
+  inShop=false;
+  if(townPos){ player.x=townPos.x; player.y=townPos.y+12; }
+  sfxEquip();
+}
+function updateShop(dt){
+  if(!(player.x>18 && player.x<ROOM.w-18)) player.x=ROOM.w/2;
+  if(!(player.y>22 && player.y<ROOM.h-14)) player.y=ROOM.h-24;
+  let mvx=0, mvy=0;
+  if(!talking){
+    if(joy.active && Math.hypot(joy.dx,joy.dy)>2){ mvx=joy.dx; mvy=joy.dy; }
+    else {
+      if(keys['a']||keys['arrowleft']) mvx-=1;
+      if(keys['d']||keys['arrowright']) mvx+=1;
+      if(keys['w']||keys['arrowup']) mvy-=1;
+      if(keys['s']||keys['arrowdown']) mvy+=1;
+    }
+  }
+  const mag=Math.hypot(mvx,mvy);
+  if(mag>0){
+    const nx=player.x+mvx/mag*player.speed*dt, ny=player.y+mvy/mag*player.speed*dt;
+    if(!roomSolid(nx,player.y)) player.x=Math.max(18,Math.min(ROOM.w-18,nx));
+    if(!roomSolid(player.x,ny)) player.y=Math.max(22,Math.min(ROOM.h-14,ny));
+    walkPhase+=dt*16;
+    const si=Math.floor(walkPhase/Math.PI);
+    if(si!==lastStep){ lastStep=si; playStep(); if(si%2===0) vibrate(1); }
+    if(mvx>0) player.face=1; else if(mvx<0) player.face=-1;
+  } else { walkPhase=0; lastStep=-1; }
+  if(attacking>0) attacking=Math.max(0,attacking-dt);
+  if(atkCd>0) atkCd=Math.max(0,atkCd-dt);
+  if(player.maxMp) player.mp=Math.min(player.maxMp,(player.mp||0)+dt*0.25);
+  centerRoomCam();
+  let best=null;
+  if(Math.hypot(player.x-ROOM.w/2, player.y-58)<34) best={k:'counter'};
+  else if(player.y>ROOM.h-30) best={k:'exitDoor'};
+  interactTarget=best; nearNpc=!!best;
+  updateHudButtons();
+}
+function openShop(){
+  try{
+    const w2=document.getElementById('shopWrap');
+    if(w2) w2.classList.remove('hidden');
+  }catch(e){}
+  sfxBeep();
+}
 // ---------- 训练假人 / 伤害跳字 ----------
 const DUMMY={x:726, y:470, flash:0, shake:0};
 let dmgNums=[], hitSparks=[];
@@ -4772,6 +4842,28 @@ document.getElementById('startBtn').onclick=()=>{
 };
 
 
+try{
+  const sc=document.getElementById('shopClose'), sbg=document.getElementById('shopBg');
+  const slv=document.getElementById('shopLeave');
+  const sbb=document.getElementById('shopTabBuy'), sss=document.getElementById('shopTabSell');
+  const sg=document.getElementById('shopGrid');
+  if(sc) sc.onclick=()=>document.getElementById('shopWrap').classList.add('hidden');
+  if(sbg) sbg.onclick=()=>document.getElementById('shopWrap').classList.add('hidden');
+  if(slv) slv.onclick=()=>{ document.getElementById('shopWrap').classList.add('hidden'); exitShop(); sfxBeep(); };
+  if(sbb&&sss){
+    sbb.onclick=()=>{ sbb.classList.remove('sp-alt'); sss.classList.add('sp-alt'); sfxBeep(); };
+    sss.onclick=()=>{ sss.classList.remove('sp-alt'); sbb.classList.add('sp-alt'); sfxBeep(); };
+  }
+  if(sg){
+    for(let i=0;i<8;i++){
+      const d=document.createElement('div');
+      d.className='eq-slot';
+      d.style.cssText='aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;color:#4a6180;font-size:16px';
+      d.textContent='?';
+      sg.appendChild(d);
+    }
+  }
+}catch(e){}
 try{ const bt=document.getElementById('buildTag'); if(bt) bt.textContent='构建 '+BUILD+' · STELLAR ECHO'; }catch(e){}
 buildMini(); resetGame(); loadCfg(); hasSave=loadGame(); syncBagBtn();
 loadStats();
