@@ -543,6 +543,7 @@
     <div id="shopBody" style="width:100%">
       <div style="text-align:center;font-size:11px;color:#a8874f;padding:10px 0">商品整理中…老店主还在上货</div>
     </div>
+    <button id="shopSellMode" class="sp-full" style="margin-top:6px;background:linear-gradient(180deg,#a8874f,#7a5a2e);border-color:#2b1c10;box-shadow:inset 0 1px 0 #d4b24a,0 3px 0 #1a120a">出售物品</button>
     <button id="shopLeave" class="sp-full sp-alt" style="margin-top:6px;background:linear-gradient(180deg,#4a3524,#33251a);border-color:#2b1c10;box-shadow:inset 0 1px 0 #6b4a2e,0 3px 0 #1a120a">离开柜台</button>
   </div>
 </div>
@@ -1025,24 +1026,30 @@ function joyMove(vx,vy){
   const dx=vx-JBX, dy=vy-JBY, d=Math.hypot(dx,dy), m=d>JR?JR/d:1;
   joy.dx=dx*m; joy.dy=dy*m;
 }
-cv.addEventListener('touchstart', e=>{
+let lastTouchAt=0;
+function handleTap(vx,vy){
   if(state!=='city') return;
   if(anyModalOpen()) return;
-  const t=e.touches[0]; const [vx,vy]=toV(t.clientX,t.clientY);
   if(hudTapEnabled && vx<112 && vy<42){ try{ openChar(); }catch(err){} return; }
-  const L=equipLayout(), H=L.hudBox;
-  if(equipHudOn && vx>=L.swx&&vx<=L.swx+L.swordW&&vy>=L.swy&&vy<=L.swy+L.swordH){ openEquip(); return; }
   if(equipHudOn){
     const El=equipLayout();
-    if(vx>=El.wx-3 && vx<=El.wx+El.GW+3 && vy>=El.wy && vy<=El.wy+El.GH){
+    // 武器组：只切换手持，任何情况下都不打开装备面板
+    if(vx>=El.wx-4 && vx<=El.wx+El.GW+4 && vy>=El.wy && vy<=El.wy+El.GH){
       const rel=(vx-El.wx-El.pad)/(El.WS+4);
       const idx=Math.max(0,Math.min(2,Math.round(rel)));
       if(EQUIP.weapons[idx]){ heldSlot=idx; sfxBeep(); vibrate(2); updateHudButtons(); }
       return;
     }
+    const H=El.hudBox;
+    if(vx>=El.swx&&vx<=El.swx+El.swordW&&vy>=El.swy&&vy<=El.swy+El.swordH){ openEquip(); return; }
+    if(vx>=H.x0&&vx<=H.x1&&vy>=H.y0&&vy<=H.y1){ openEquip(); return; }
   }
-  if(equipHudOn && vx>=H.x0&&vx<=H.x1&&vy>=H.y0&&vy<=H.y1){ openEquip(); return; }
   if(vx < VW*0.5 && vy > VH*0.5){ joy.active=true; joyMove(vx,vy); vibrate(1); }
+}
+cv.addEventListener('touchstart', e=>{
+  lastTouchAt=performance.now();
+  const t=e.touches[0]; const [vx,vy]=toV(t.clientX,t.clientY);
+  handleTap(vx,vy);
 }, {passive:true});
 cv.addEventListener('touchmove', e=>{
   if(!joy.active) return;
@@ -1052,11 +1059,10 @@ cv.addEventListener('touchmove', e=>{
 cv.addEventListener('touchend', ()=>{ joy.active=false; joy.dx=joy.dy=0; }, {passive:true});
 cv.addEventListener('touchcancel', ()=>{ joy.active=false; joy.dx=joy.dy=0; }, {passive:true});
 cv.addEventListener('mousedown', e=>{
-  if(state!=='city')return; const [vx,vy]=toV(e.clientX,e.clientY);
-  const L=equipLayout(), H=L.hudBox;
-  if(equipHudOn && vx>=L.swx&&vx<=L.swx+L.swordW&&vy>=L.swy&&vy<=L.swy+L.swordH){ openEquip(); return; }
-  if(equipHudOn && vx>=H.x0&&vx<=H.x1&&vy>=H.y0&&vy<=H.y1){ openEquip(); return; }
-  if(vx<VW*0.5 && vy>VH*0.5){ joy.active=true; joyMove(vx,vy); vibrate(1); }
+  // 触摸后浏览器会补发 mousedown，忽略它，避免重复处理
+  if(performance.now()-lastTouchAt < 700) return;
+  const [vx,vy]=toV(e.clientX,e.clientY);
+  handleTap(vx,vy);
 });
 cv.addEventListener('mousemove', e=>{ if(!joy.active)return; const [vx,vy]=toV(e.clientX,e.clientY); joyMove(vx,vy); });
 cv.addEventListener('mouseup', ()=>{ joy.active=false; joy.dx=joy.dy=0; });
@@ -1816,6 +1822,7 @@ function renderShopRoom(){
   drawJoystick();
   drawCharPortrait();
   drawHUD();
+  if(showFps){ drawText(fpsVal+' FPS', 4, 41, '#4ade80'); }
   blitToScreen();
 }
 function render(){
@@ -4903,6 +4910,15 @@ try{
   if(sc) sc.onclick=()=>document.getElementById('shopWrap').classList.add('hidden');
   if(sbg) sbg.onclick=()=>document.getElementById('shopWrap').classList.add('hidden');
   if(slv) slv.onclick=()=>{ document.getElementById('shopWrap').classList.add('hidden'); sfxBeep(); toastMsg('再看看货架'); };
+  const ssm=document.getElementById('shopSellMode');
+  if(ssm) ssm.onclick=()=>{
+    document.getElementById('shopWrap').classList.add('hidden');
+    openBag();
+    multiMode=true; multiSel.clear();
+    try{ const mb=document.getElementById('bagMultiBtn'); if(mb){ mb.classList.add('on'); mb.textContent='多选中'; } }catch(e){}
+    updateMultiBar(); renderBag();
+    sfxBeep(); toastMsg('勾选要出售的物品');
+  };
   if(sbb&&sss){
     sbb.onclick=()=>{ sbb.classList.remove('sp-alt'); sss.classList.add('sp-alt'); sfxBeep(); };
     sss.onclick=()=>{ sss.classList.remove('sp-alt'); sbb.classList.add('sp-alt'); sfxBeep(); };
