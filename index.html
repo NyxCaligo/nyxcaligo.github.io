@@ -666,6 +666,7 @@
     <button id="devOneHit" class="sp-full sp-alt">一刀秒杀：关</button>
     <button id="devClearMobs" class="sp-full sp-alt">清理所有怪物</button>
     <button id="devSpeed" class="sp-full sp-alt">移速大增：关</button>
+    <button id="devSpawn" class="sp-full sp-alt">回到出生点</button>
     <button id="devClose" class="sp-full">关闭</button>
   </div>
 </div>
@@ -869,6 +870,7 @@
       <button id="openRedeem" class="sp-full sp-alt">兑换码</button>
       <button id="openStats" class="sp-full sp-alt">游玩统计</button>
       <button id="openSave" class="sp-full sp-alt">存档</button>
+      <div id="buildTag" style="font-size:10px;color:#5b7089;text-align:center;padding:4px 0"></div>
       <div id="buildTag" style="font-size:10px;color:#5b7089;text-align:center;padding:4px 0"></div>
     </div>
   </div>
@@ -1104,7 +1106,7 @@ const borderDeco = [];
 let state='menu', last=0;
 let camX=0, camY=0, camXs=0, camYs=0, walkPhase=0;
 let player = { x:680, y:448, hp:100, maxHp:100, r:6, speed:120, face:1 };
-const BUILD='v163';
+const BUILD='v168';
 let sessionSec=0;
 let money=0;   // 铜币
 function fmtMoney(cu){
@@ -1189,106 +1191,63 @@ function buildForestWorld(){
   const w=[];
   for(let y=0;y<FH;y++){ const row=[]; for(let x=0;x<FW;x++){
     const edge=Math.min(x,y,FW-1-x,FH-1-y);
-    row.push(edge<2?2:0);
+    row.push(edge<2?1:0);
   } w.push(row); }
   const road=new Uint8Array(FW*FH), water=new Uint8Array(FW*FH);
-  // 河流（竖向，带弯曲）
+  // 河流（竖向蜿蜒）
   const riverX=(y)=> 62 + Math.sin(y*0.09)*7;
-  for(let y=3;y<FH-3;y++){
+  for(let y=2;y<FH-2;y++){
     const cx=riverX(y);
     for(let x=Math.floor(cx-3);x<=Math.ceil(cx+3);x++){
-      if(x<3||x>=FW-3) continue;
-      const d=Math.abs(x-cx);
-      if(d<3.2) water[y*FW+x]=1;
+      if(x<2||x>=FW-2) continue;
+      if(Math.abs(x-cx)<3.1) water[y*FW+x]=1;
     }
   }
   // 木桥
   const bridgeY=52;
-  for(let x=Math.floor(riverX(bridgeY)-4);x<=Math.ceil(riverX(bridgeY)+4);x++){
-    for(let y=bridgeY-1;y<=bridgeY+1;y++) water[y*FW+x]=0;
-  }
+  const bx0=Math.floor(riverX(bridgeY)-4), bx1=Math.ceil(riverX(bridgeY)+4);
+  for(let x=bx0;x<=bx1;x++) for(let y=bridgeY-1;y<=bridgeY+1;y++) water[y*FW+x]=0;
   // 湖泊（西侧）
-  const lakeX=26, lakeY=72, lakeR=11;
+  const lakeX=26, lakeY=74, lakeR=12;
   for(let y=lakeY-lakeR;y<=lakeY+lakeR;y++) for(let x=lakeX-lakeR;x<=lakeX+lakeR;x++){
     if(x<3||y<3||x>=FW-3||y>=FH-3) continue;
-    const d=Math.hypot((x-lakeX)*0.9,(y-lakeY)*1.15);
-    if(d<lakeR + (hash(x*5+11,y*3+7)-0.5)*2.5) water[y*FW+x]=1;
+    const d=Math.hypot((x-lakeX)*0.92,(y-lakeY)*1.1);
+    if(d<lakeR + (hash(x*5+11,y*3+7)-0.5)*2.2) water[y*FW+x]=1;
   }
-  // 土路：西入口 → 桥 → 东侧
-  const path=[[6,52],[20,52],[38,50],[Math.round(riverX(52)),52],[70,54],[88,52],[94,52]];
+  // 土路
+  const path=[[5,52],[20,52],[38,50],[Math.round(riverX(52)),52],[70,54],[88,52],[95,52]];
   for(let i=0;i<path.length-1;i++){
     const [x1,y1]=path[i], [x2,y2]=path[i+1];
     const steps=Math.max(Math.abs(x2-x1),Math.abs(y2-y1))*2;
     for(let t=0;t<=steps;t++){
       const x=Math.round(x1+(x2-x1)*t/steps), y=Math.round(y1+(y2-y1)*t/steps);
-      for(let dy=-2;dy<=2;dy++) for(let dx=-2;dx<=2;dx++){
+      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
         const nx=x+dx, ny=y+dy;
         if(nx<3||ny<3||nx>=FW-3||ny>=FH-3) continue;
-        if(Math.hypot(dx,dy)<=2.2) road[ny*FW+nx]=1;
+        if(Math.hypot(dx,dy)<=1.6) road[ny*FW+nx]=1;
       }
     }
   }
-  // 土堆（障碍）
-  for(let i=0;i<28;i++){
-    const bx=8+Math.floor(hash(i*13+5,9)*84), by=8+Math.floor(hash(7,i*17+3)*84);
-    if(road[by*FW+bx]||water[by*FW+bx]) continue;
-    const r=1+Math.floor(hash(i,11)*2);
-    for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){
-      const nx=bx+dx, ny=by+dy;
-      if(nx<3||ny<3||nx>=FW-3||ny>=FH-3) continue;
-      if(road[ny*FW+nx]||water[ny*FW+nx]) continue;
-      w[ny][nx]=3; // 土堆
-    }
-  }
-  forestMobs=[];
+  // 散落的石块与灌木（单个/至多 2 格，不会成大片）
   let placed=0, guard=0;
-  while(placed<90 && guard<6000){
+  while(placed<120 && guard<6000){
     guard++;
-    const x=4+Math.floor(Math.random()*92);
-    const y=4+Math.floor(Math.random()*92);
+    const x=4+Math.floor(Math.random()*(FW-8));
+    const y=4+Math.floor(Math.random()*(FH-8));
     const i=y*FW+x;
-    if(road[i]||water[i]) continue;
-    if(w[y][x]!==0) continue;
-    if(Math.abs(x-7)<5 && Math.abs(y-52)<7) continue;
-    // 只要求本格与四邻不是水面/道路
-    let ok=true;
-    for(const [dx,dy] of [[0,0],[1,0],[-1,0],[0,1],[0,-1]]){
-      const nx=x+dx, ny=y+dy;
-      if(nx<3||ny<3||nx>=FW-3||ny>=FH-3){ ok=false; break; }
-      if(road[ny*FW+nx]||water[ny*FW+nx]){ ok=false; break; }
-    }
-    // 不要和其它树石重叠
-    if(ok){
-      for(const m of forestMobs){
-        if(Math.hypot(m.x-(x*TILE+8), m.y-(y*TILE+8)) < 20){ ok=false; break; }
-      }
-    }
-    if(!ok) continue;
-    const isTree = hash(x*3+1, y*5+2) > 0.42;
-    forestMobs.push({kind:isTree?'tree':'rock',
-      x:x*TILE+TILE/2, y:y*TILE+TILE/2,
-      hp:isTree?12:16, maxHp:isTree?12:16, r:isTree?9:8, dead:false});
+    if(road[i]||water[i]||w[y][x]!==0) continue;
+    if(y>FH-8) continue;
+    // 不挡住入口与桥
+    if(Math.abs(y-52)<3 && x<12) continue;
+    if(Math.abs(y-bridgeY)<3) continue;
+    // 邻接至少一格空地，避免成墙
+    let open=0;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) if(!water[(y+dy)*FW+(x+dx)]) open++;
+    if(open<3) continue;
+    w[y][x] = (hash(x*3+1,y*5+2)>0.55) ? 4 : 5;  // 4石 5灌木
     placed++;
   }
   return {world:w, road, water};
-}
-function drawForestMob(m){
-  const x=Math.round((m.x-camX)*RES)/RES, y=Math.round((m.y-camY)*RES)/RES;
-  if(m.kind==='tree'){
-    px(x-7, y+1, 14, 3, 'rgba(0,0,0,.22)');
-    px(x-2, y-10, 4, 12, '#5a3d22');
-    px(x-9, y-24, 18, 12, '#2f6b3a');
-    px(x-7, y-28, 14, 8, '#3a7d46');
-    px(x-5, y-31, 10, 5, '#48915a');
-    px(x-6, y-27, 4, 4, '#63a86f');
-    px(x+3, y-23, 4, 3, '#57a066');
-  } else {
-    px(x-8, y+1, 16, 3, 'rgba(0,0,0,.2)');
-    px(x-7, y-6, 14, 8, '#7b8390');
-    px(x-6, y-8, 12, 5, '#8f98a5');
-    px(x-4, y-9, 8, 3, '#a9b2bf');
-    px(x-7, y-1, 14, 3, '#5f6672');
-  }
 }
 function forestSolid(x,y){
   const tx=Math.floor(x/TILE), ty=Math.floor(y/TILE);
@@ -1296,10 +1255,6 @@ function forestSolid(x,y){
   if(forestRoad[ty*FW+tx]) return false;
   if(forestWater[ty*FW+tx]) return true;
   if(forestWorld[ty][tx]!==0) return true;
-  for(const m of forestMobs){
-    if(m.dead) continue;
-    if(Math.hypot(x-m.x, y-m.y) < (m.r||8)) return true;
-  }
   return false;
 }
 function setMap(name){
@@ -2077,8 +2032,20 @@ function buildChunk(cx,cy){
       const ty0=Math.max(0,Math.floor(y0/TILE)), ty1=Math.min(WROWS, Math.ceil((y0+CHUNK)/TILE));
       for(let ty=ty0; ty<ty1; ty++) for(let tx=tx0; tx<tx1; tx++){
         const sx=tx*TILE-x0, sy=ty*TILE-y0, t=world[ty][tx];
-        if(t===0){ if(tileWaterCnt[ty*WCOLS+tx]>0) drawWaterTile(sx,sy,tx,ty); else drawGroundTile(sx,sy,tx,ty); }
-        else drawBoundaryBase(sx,sy,tx,ty);
+        if(mapName==='forest'){
+          if(t===0){
+            if(tileWaterCnt[ty*WCOLS+tx]>0) drawWaterTile(sx,sy,tx,ty);
+            else if(tileRoadCnt[ty*WCOLS+tx]>2) drawForestRoad(sx,sy,tx,ty);
+            else drawForestGrass(sx,sy,tx,ty);
+          } else {
+            if(t===4) drawForestStone(sx,sy,tx,ty);
+            else if(t===5) drawForestBush(sx,sy,tx,ty);
+            else drawForestWall(sx,sy,tx,ty);
+          }
+        } else {
+          if(t===0){ if(tileWaterCnt[ty*WCOLS+tx]>0) drawWaterTile(sx,sy,tx,ty); else drawGroundTile(sx,sy,tx,ty); }
+          else drawBoundaryBase(sx,sy,tx,ty);
+        }
       }
       octx=saved;
       rec={cv,x0,y0};
@@ -2086,6 +2053,56 @@ function buildChunk(cx,cy){
   }catch(e){ rec=null; try{ octx=globalThis.__mainOctx||octx; }catch(_){} }
   chunkCache.set(key,rec);
   return rec;
+}
+function drawForestGrass(sx,sy,tx,ty){
+  const h=hash(tx*2+1,ty*3+7);
+  octx.fillStyle = h<0.25 ? '#4f8f3a' : (h<0.7 ? '#569a40' : '#5da648');
+  octx.fillRect(sx,sy,TILE,TILE);
+  octx.fillStyle='rgba(255,255,255,.05)'; octx.fillRect(sx,sy,TILE,1);
+  const h2=hash(tx*7+3,ty*13+5);
+  if(h2<0.35){
+    octx.fillStyle='#3f7a2e';
+    const gx=sx+2+Math.floor(h2*10), gy=sy+4+Math.floor(hash(tx,ty+9)*8);
+    octx.fillRect(gx,gy,1,3); octx.fillRect(gx+2,gy+1,1,2);
+  }
+  if(h2>0.86){
+    octx.fillStyle='#6fbf58';
+    octx.fillRect(sx+4+Math.floor(h2*8), sy+5, 2, 1);
+  }
+}
+function drawForestRoad(sx,sy,tx,ty){
+  const h=hash(tx*5+2,ty*7+3);
+  octx.fillStyle = h<0.5 ? '#8a6b45' : '#96774d';
+  octx.fillRect(sx,sy,TILE,TILE);
+  octx.fillStyle='rgba(0,0,0,.10)';
+  octx.fillRect(sx,sy+TILE-2,TILE,2);
+  if(h>0.7){ octx.fillStyle='#7b5e3c'; octx.fillRect(sx+3,sy+5,3,2); }
+}
+function drawForestStone(sx,sy,tx,ty){
+  drawForestGrass(sx,sy,tx,ty);
+  const h=hash(tx*11+1,ty*7+3);
+  octx.fillStyle='#6f7783'; octx.fillRect(sx+2,sy+4,12,9);
+  octx.fillStyle='#8a929e'; octx.fillRect(sx+2,sy+4,12,3);
+  octx.fillStyle='#a9b2bf'; octx.fillRect(sx+4,sy+4,5,2);
+  octx.fillStyle='#545b66'; octx.fillRect(sx+2,sy+11,12,2);
+  octx.fillStyle='#5b8f45';
+  octx.fillRect(sx+3+Math.floor(h*6), sy+5, 3, 2);
+}
+function drawForestBush(sx,sy,tx,ty){
+  drawForestGrass(sx,sy,tx,ty);
+  octx.fillStyle='#2f6b3a'; octx.fillRect(sx+2,sy+4,12,9);
+  octx.fillStyle='#3a7d46'; octx.fillRect(sx+3,sy+3,10,7);
+  octx.fillStyle='#4a9a55'; octx.fillRect(sx+4,sy+3,4,3);
+  octx.fillStyle='#24552e'; octx.fillRect(sx+2,sy+11,12,2);
+  octx.fillStyle='#57a066'; octx.fillRect(sx+9,sy+5,2,2);
+}
+function drawForestWall(sx,sy,tx,ty){
+  const h=hash(tx*3+5,ty*9+1);
+  octx.fillStyle = h<0.5 ? '#28492b' : '#2f5733';
+  octx.fillRect(sx,sy,TILE,TILE);
+  octx.fillStyle='#3a6b3f'; octx.fillRect(sx+2,sy+2,5,4);
+  octx.fillStyle='#1d3a20'; octx.fillRect(sx+9,sy+8,5,5);
+  octx.fillStyle='#4a8250'; octx.fillRect(sx+3,sy+10,3,2);
 }
 function renderShopRoom(){
   octx.fillStyle='#141018'; octx.fillRect(0,0,VW,VH);
@@ -2183,23 +2200,18 @@ function render(){
   const ds=[];
   const vx0=camX-40, vx1=camX+VW+40, vy0=camY-60, vy1=camY+VH+40;
   const vis=(x,y,w,h)=> !(x+w<vx0 || x>vx1 || y+h<vy0 || y>vy1);
-  for(const b of BUILDINGS) if(vis(b.x,b.y-24,b.w,b.h+40)) ds.push({bottom:b.y+b.h, draw:()=>drawHouse(b)});
-  for(const p of PROPS) if(vis(p.x-40,p.y-40,80,80)) ds.push({bottom:p.y, draw:()=>drawProp(p)});
-  if(vis(NPC.x-16,NPC.y-24,32,40)) ds.push({bottom:NPC.y, draw:drawNPC});
-  if(vis(DUMMY.x-12,DUMMY.y-26,24,30)) ds.push({bottom:DUMMY.y, draw:drawDummy});
-  for(const sl of slimes) ds.push({bottom:sl.y, draw:()=>drawSlime(sl)});
-  if(mapName==='forest'){
-    for(const m of forestMobs){
-      if(m.dead) continue;
-      if(!vis(m.x-40, m.y-50, 80, 60)) continue;
-      ds.push({bottom:m.y, draw:()=>drawForestMob(m)});
-    }
+  if(mapName==='town'){
+    for(const b of BUILDINGS) if(vis(b.x,b.y-24,b.w,b.h+40)) ds.push({bottom:b.y+b.h, draw:()=>drawHouse(b)});
+    for(const p of PROPS) if(vis(p.x-40,p.y-40,80,80)) ds.push({bottom:p.y, draw:()=>drawProp(p)});
+    if(vis(NPC.x-16,NPC.y-24,32,40)) ds.push({bottom:NPC.y, draw:drawNPC});
+    if(vis(DUMMY.x-12,DUMMY.y-26,24,30)) ds.push({bottom:DUMMY.y, draw:drawDummy});
+    if(vis(ELDER.x-8,ELDER.y-20,16,30)) ds.push({bottom:ELDER.y, draw:drawElder});
+    if(vis(OFFICER.x-8,OFFICER.y-20,16,30)) ds.push({bottom:OFFICER.y, draw:drawOfficer});
+    ds.push({bottom:SHOP_DOOR.y+2, draw:drawShopDoorMark});
+    ds.push({bottom:REVIVE_POINT.y, draw:drawShrine});
+    ds.push({bottom:99999, draw:drawGate});
   }
-  if(vis(ELDER.x-8,ELDER.y-20,16,30)) ds.push({bottom:ELDER.y, draw:drawElder});
-  if(vis(OFFICER.x-8,OFFICER.y-20,16,30)) ds.push({bottom:OFFICER.y, draw:drawOfficer});
-  ds.push({bottom:SHOP_DOOR.y+2, draw:drawShopDoorMark});
-  ds.push({bottom:REVIVE_POINT.y, draw:drawShrine});
-  ds.push({bottom:99999, draw:drawGate});
+  for(const sl of slimes) ds.push({bottom:sl.y, draw:()=>drawSlime(sl)});
   ds.sort((a,b)=>a.bottom-b.bottom);
   for(const d of ds){ if(d.bottom<=player.y) d.draw(); }
   if(dead){
@@ -4143,6 +4155,13 @@ document.getElementById('devGod').onclick=(e)=>{
   toastMsg(godMode?'无敌模式已开启':'无敌模式已关闭');
 };
 document.getElementById('devClearMobs').onclick=()=>{ slimes=[]; toastMsg('已清理所有怪物'); };
+document.getElementById('devSpawn').onclick=()=>{
+  if(mapName==='forest') setMap('town');
+  player.x=680; player.y=448; player.face=1;
+  camXs=player.x-VW/2; camYs=player.y-VH/2;
+  document.getElementById('devWrap').classList.add('hidden');
+  toastMsg('已回到出生点'); sfxEquip();
+};
 document.getElementById('devSpeed').onclick=(e)=>{
   const on = player.speed!==300;
   player.speed = on ? 300 : 120;
@@ -6628,6 +6647,7 @@ try{
 }catch(e){}
 
 
+try{ const bt=document.getElementById('buildTag'); if(bt) bt.textContent='版本 '+BUILD+' · 单文件版 '+BUILD; }catch(e){}
 try{
   enableInstantTap(['menuBtn','eqToggle','devBtn','bagBtn','colBtn','craftBtn','charBtn','quadBtn',
                     'atkBtn','interactBtn','settingsBtn','pauseGameBtn','mTitle','mClose']);
