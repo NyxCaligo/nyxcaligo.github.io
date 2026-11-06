@@ -2290,6 +2290,15 @@ function drawEquipHUD(){
     eqSlot(x,y,L.WS);
     if(EQUIP.weapons[i] && ITEMS[EQUIP.weapons[i]]) drawItemIcon(ITEMS[EQUIP.weapons[i]].ic, x, y, L.WS/16);
     else drawText('?', x+(L.WS-6)/2, y+(L.WS-10)/2, '#7b8492', 2);
+    if(i===heldSlot && EQUIP.weapons[i] && atkCd>0){
+      const rate=(ITEMS[EQUIP.weapons[i]].rate||1.8);
+      const frac=Math.max(0,Math.min(1, atkCd/rate));
+      const hgt=Math.round((L.WS-2)*frac);
+      octx.fillStyle='rgba(6,10,18,.72)';
+      octx.fillRect(x+1, y+1, L.WS-2, hgt);
+      octx.fillStyle='rgba(96,165,250,.85)';
+      octx.fillRect(x+1, y+L.WS-hgt, L.WS-2, 1);
+    }
     if(i===heldSlot && EQUIP.weapons[i]){
       px(x-1,y-1,L.WS+2,1,'#f5c542'); px(x-1,y+L.WS,L.WS+2,1,'#f5c542');
       px(x-1,y-1,1,L.WS+2,'#f5c542'); px(x+L.WS,y-1,1,L.WS+2,'#f5c542');
@@ -3667,7 +3676,7 @@ function drawAmbient(){
   const gx0=Math.max(0,Math.floor(camX/TILE)), gx1=Math.min(WCOLS,Math.ceil((camX+VW)/TILE));
   const gy0=Math.max(0,Math.floor(camY/TILE)), gy1=Math.min(WROWS,Math.ceil((camY+VH)/TILE));
   for(let ty=gy0; ty<gy1; ty++) for(let tx=gx0; tx<gx1; tx++){
-    if(tileWaterCnt[ty*WCOLS+tx]>20){
+    if(world[ty][tx]===0 && tileWaterCnt[ty*WCOLS+tx]>20){
       const wx0=tx*TILE, wy0=ty*TILE;
       if(wx0+TILE>BRIDGE.x && wx0<BRIDGE.x+BRIDGE.w && wy0+TILE>BRIDGE.y && wy0<BRIDGE.y+BRIDGE.h) continue;
       const sx=tx*TILE-camX, sy=ty*TILE-camY;
@@ -4119,7 +4128,7 @@ function updateHudButtons(){
 
   const ab=document.getElementById('atkBtn');
   if(ab) ab.classList.toggle('hidden', hide || equipOpen || bagOpen || talking);
-  if(ab) ab.style.opacity = (atkCd>0) ? '0.5' : '1';
+
   const ib=document.getElementById('interactBtn');
   if(ib){
     ib.classList.toggle('hidden', hide || equipOpen || bagOpen || talking);
