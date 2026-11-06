@@ -880,7 +880,7 @@
   </div>
 </div>
 
-<div id="titleBuild" style="position:fixed;left:10px;bottom:8px;z-index:5;font-size:10px;color:rgba(147,197,253,.55);pointer-events:none">构建 <span id="titleBuildNum">-</span></div>
+<div id="titleBuild" style="position:fixed;left:0;right:0;bottom:6px;z-index:9;text-align:center;font-size:11px;color:rgba(147,197,253,.85);pointer-events:none">构建 <span id="titleBuildNum">-</span></div>
 <div id="menu" class="ov">
   <div class="title">星辰回响</div>
   <div class="sub">STELLAR ECHO</div>
@@ -6466,6 +6466,19 @@ function checkOrientation(){
 window.addEventListener('resize', checkOrientation);
 checkOrientation();
 
+function startGameClick(){
+  const menu=document.getElementById('menu');
+  if(!menu || menu.classList.contains('hidden')) return;
+  document.getElementById('startBtn').onclick();
+}
+document.getElementById('menu').addEventListener('click', (e)=>{
+  const menu=document.getElementById('menu');
+  if(!menu || menu.classList.contains('hidden')) return;
+  // 点设置/存档/退出这些按钮不触发开始
+  const t=e.target;
+  if(t && t.closest && t.closest('#settingsBtn,#titleLoad,#titleExitBtn,#titleFsBtn')) return;
+  startGameClick();
+}, {passive:true});
 document.getElementById('startBtn').onclick=()=>{
   document.getElementById('menu').classList.add('hidden');
   if(!hasSave) resetGame();
