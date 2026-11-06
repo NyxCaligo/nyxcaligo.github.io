@@ -654,7 +654,7 @@
   </div>
 </div>
 <div id="devWrap" class="modal hidden" style="z-index:17">
-  <div class="modal-bg" id="devBg"></div>
+  <div class="modal-bg" id="devBg" style="background:transparent"></div>
   <div class="modal-box" style="width:min(300px,80vw)">
     <div class="eq-title" style="font-size:20px">开发者选项</div>
     <div id="devItems2" style="display:flex; flex-wrap:wrap; gap:6px; width:100%"></div>
@@ -887,7 +887,6 @@
   </div>
 </div>
 
-<div id="titleBuild" style="position:fixed;left:0;right:0;bottom:6px;z-index:9;text-align:center;font-size:11px;color:rgba(147,197,253,.85);pointer-events:none">构建 <span id="titleBuildNum">-</span></div>
 <div id="menu" class="ov">
   <div class="title">星辰回响</div>
   <div class="sub">STELLAR ECHO</div>
@@ -2287,7 +2286,7 @@ function enableInstantTap(idList){
     const guarded=(e)=>{
       const now=Date.now();
       if(now-last<300) return;
-      last=now;
+      last=now; lastInstantTapAt=now;
       try{ fn(e); }catch(err){ try{ showFatal(err.message); }catch(e2){} }
     };
     el.onclick=guarded;
@@ -2297,6 +2296,12 @@ function enableInstantTap(idList){
     }, {passive:true});
   }
 }
+let lastInstantTapAt=0;
+document.addEventListener('click', (e)=>{
+  if(Date.now()-lastInstantTapAt < 360){
+    e.stopPropagation(); e.preventDefault();
+  }
+}, true);
 function frame(now){
   const dt=Math.min((now-last)/1000,0.05); last=now;
   if(!paused) gtime += dt;
@@ -4278,8 +4283,27 @@ function closeConfirm(){
   document.getElementById('confirmWrap').classList.add('hidden');
 }
 let confirmNoCb=null;
-function askConfirm(msg, cb, yesLabel, noLabel, noCb){
+function askConfirm(msg, cb, yesLabel, noLabel, noCb, theme){
   confirmCb=cb; confirmNoCb=noCb||null;
+  try{
+    const box=document.querySelector('#confirmWrap .modal-box');
+    if(box){
+      if(theme==='forest'){
+        box.style.background='linear-gradient(180deg,#1f3d2a,#12291c)';
+        box.style.borderColor='#2f7d4a';
+        box.style.boxShadow='0 0 0 2px #0c1f14, 0 0 22px rgba(47,125,74,.55)';
+      } else {
+        box.style.background=''; box.style.borderColor=''; box.style.boxShadow='';
+      }
+    }
+    const t=document.getElementById('confirmMsg');
+    if(t){
+      if(theme==='forest'){
+        t.innerHTML='<div style="font-size:20px;letter-spacing:6px;margin-bottom:4px">🌲🌲🌲</div>'+msg;
+        t.style.color='#b8e6c8';
+      } else { t.textContent=msg; t.style.color=''; }
+    }
+  }catch(e){}
   document.getElementById('confirmMsg').textContent=msg;
   const y=document.getElementById('confirmYes'), n=document.getElementById('confirmNo');
   if(y) y.textContent=yesLabel||'确定';
@@ -4777,7 +4801,7 @@ document.getElementById('interactBtn').onclick=()=>{
     if(!questCleared){ toastMsg('城门紧闭……（先通过罗兰的试炼）'); return; }
     askConfirm('要前往森林吗？', ()=>{
       enterForest();
-    }, '进入', '再去逛逛');
+    }, '进入森林', '再等等', null, 'forest');
     return;
   }
   if(t.k==='dummy'){ sfxBeep(); toastMsg('这东西会不会活过来。'); return; }
@@ -6602,8 +6626,8 @@ try{
   }
 
 }catch(e){}
-try{ const bt=document.getElementById('buildTag'); if(bt) bt.textContent='构建 '+BUILD+' · STELLAR ECHO'; }catch(e){}
-try{ const tb=document.getElementById('titleBuildNum'); if(tb) tb.textContent=BUILD; }catch(e){}
+
+
 try{
   enableInstantTap(['menuBtn','eqToggle','devBtn','bagBtn','colBtn','craftBtn','charBtn','quadBtn',
                     'atkBtn','interactBtn','settingsBtn','pauseGameBtn','mTitle','mClose']);
