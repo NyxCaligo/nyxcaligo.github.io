@@ -70,7 +70,7 @@
            background:#4ade80; color:#052e16; border:2px solid #052e16; border-radius:0;
            box-shadow:0 4px 0 #052e16; padding:13px 34px; cursor:pointer; }
   button:active { transform:translateY(3px); box-shadow:0 1px 0 #052e16; }
-  #topRight { position:fixed; z-index:7; top:calc(10px + env(safe-area-inset-top, 0px));
+  #topRight { position:fixed; z-index:7; top:calc(env(safe-area-inset-top, 0px) + 1px);
               right:calc(12px + env(safe-area-inset-right, 0px));
               display:flex; align-items:center; gap:8px; }
   #miniMap { width:80px; height:80px; image-rendering:pixelated; background:#0a1424;
@@ -2353,17 +2353,24 @@ function enableInstantTap(idList){
     if(!el || !el.onclick) continue;
     const fn=el.onclick;
     let last=0;
-    const guarded=(e)=>{
+    const fire=(e)=>{
       const now=Date.now();
-      if(now-last<300) return;
+      if(now-last<150) return;
       last=now;
       try{ fn(e); }catch(err){ try{ showFatal(err.message); }catch(e2){} }
     };
-    el.onclick=guarded;
-    el.addEventListener('pointerdown', (e)=>{
+    // touchstart + preventDefault：彻底阻止浏览器补发 click，避免"打开又关闭"闪烁
+    el.addEventListener('touchstart', (e)=>{
       if(e.target && e.target.closest && e.target.closest('input,textarea')) return;
-      guarded(e);
-    }, {passive:true});
+      if(e.cancelable) e.preventDefault();
+      e.stopPropagation();
+      fire(e);
+    }, {passive:false});
+    el.addEventListener('mousedown', (e)=>{
+      if(e.target && e.target.closest && e.target.closest('input,textarea')) return;
+      e.preventDefault();
+      fire(e);
+    });
   }
 }
 function frame(now){
@@ -3264,7 +3271,7 @@ function renderEquipPanel(){
   try{
     const a=playerArmorTotal();
     const el=document.getElementById('eqArmorLine');
-    if(el) el.textContent='护甲 '+a+'　减伤 '+Math.floor(a/2)+' 点/次';
+    if(el) el.textContent='护甲 '+a+'　减伤 '+Math.floor(a/2);
   }catch(e){}
   const mk=(t,i,empty)=>{
     const d=document.createElement('div'); d.className='eq-slot';
