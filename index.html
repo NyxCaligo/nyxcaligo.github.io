@@ -1802,6 +1802,7 @@ function renderShopRoom(){
     else if(interactTarget.k==='exitDoor') drawText('!', ox+ROOM.w/2+14, oy+ROOM.h-20, '#f5c542', 2);
   }
   drawHUD();
+  blitToScreen();
 }
 function render(){
   octx.clearRect(0,0,VW,VH);
@@ -1870,6 +1871,9 @@ function render(){
   }
   if(state==='city'){ if(equipHudOn && !talking) drawEquipHUD(); drawJoystick(); }
 
+  blitToScreen();
+}
+function blitToScreen(){
   ctx.fillStyle='#05070d'; ctx.fillRect(0,0,cv.width,cv.height);
   ctx.drawImage(off, oxCss, oyCss, VW*cssScale, VH*cssScale);
 }
@@ -4390,19 +4394,62 @@ function drawShopDoorMark(){
   px(x+9, y-17, 6, 1, '#5a3a1f');
 }
 function drawGate(){
-  // 右侧城门（画在边界墙上）
-  const gx=990, gy=380;
+  const gx=988, gy=470;
   const x=Math.round((gx-camX)*RES)/RES, y=Math.round((gy-camY)*RES)/RES;
-  if(x<-60||x>VW+60) return;
-  px(x-24, y-70, 48, 86, '#6b6b74');
-  px(x-24, y-70, 48, 4, '#8a8a94');
-  px(x-18, y-58, 36, 58, '#2b2b33');
-  px(x-18, y-58, 36, 3, '#3f3f46');
-  for(let i=0;i<5;i++) px(x-16+i*8, y-52, 4, 52, '#3a3a44');
-  px(x-30, y-84, 60, 12, '#7a7a84');
-  px(x-30, y-84, 60, 2, '#9aa3ae');
-  px(x-30, y-84, 2, 12, '#6b6b74'); px(x+28, y-84, 2, 12, '#6b6b74');
-  px(x-3, y-80, 6, 6, '#d4b24a');
+  if(x<-90||x>VW+90||y<-140||y>VH+80) return;
+  // 地面阴影
+  px(x-40, y-2, 80, 5, 'rgba(0,0,0,.22)');
+  // 左右塔楼
+  for(const sx of [-40, 22]){
+    px(x+sx, y-86, 18, 86, '#7b8390');
+    px(x+sx, y-86, 18, 3, '#98a1ae');
+    px(x+sx, y-86, 3, 86, '#8f98a5');
+    px(x+sx+15, y-86, 3, 86, '#5f6672');
+    // 塔顶雉堞
+    for(let i=0;i<3;i++) px(x+sx+i*6, y-94, 5, 8, '#8f98a5');
+    px(x+sx, y-94, 18, 2, '#a9b2bf');
+    // 窗
+    px(x+sx+6, y-62, 6, 10, '#20262e');
+    px(x+sx+7, y-60, 4, 6, '#39424e');
+    // 砖缝
+    for(let i=1;i<7;i++) px(x+sx+2, y-86+i*11, 14, 1, 'rgba(0,0,0,.16)');
+  }
+  // 中央拱门墙体
+  px(x-22, y-78, 44, 78, '#6f7783');
+  px(x-22, y-78, 44, 3, '#8b94a1');
+  for(let i=1;i<7;i++) px(x-20, y-76+i*11, 40, 1, 'rgba(0,0,0,.14)');
+  // 拱形门洞
+  for(let i=0;i<9;i++){
+    const w=30-i*2.2;
+    px(x-w/2, y-70+i*8, w, 8, '#1b2028');
+  }
+  px(x-15, y-70, 30, 4, '#242b34');
+  // 木闸门 + 铁条
+  px(x-14, y-52, 28, 52, '#5a3a22');
+  for(let i=0;i<5;i++) px(x-14+i*6, y-52, 2, 52, '#452b18');
+  for(let i=0;i<3;i++) px(x-14, y-44+i*16, 28, 3, '#39424e');
+  px(x-14, y-52, 28, 2, '#6b4a2e');
+  px(x-2, y-30, 4, 4, '#c9a227');
+  // 门楣横梁 + 徽记
+  px(x-26, y-84, 52, 7, '#8f98a5');
+  px(x-26, y-84, 52, 2, '#a9b2bf');
+  px(x-26, y-84, 2, 7, '#6f7783'); px(x+24, y-84, 2, 7, '#6f7783');
+  px(x-5, y-83, 10, 5, '#d4b24a');
+  px(x-3, y-82, 6, 3, '#8a6a1f');
+  // 旗帜
+  for(const sx of [-31, 23]){
+    px(x+sx, y-76, 1, 22, '#4a3020');
+    px(x+sx+1, y-75, 8, 6, '#8f2b2b');
+    px(x+sx+1, y-69, 8, 2, '#6b1f1f');
+    px(x+sx+4, y-74, 2, 3, '#e8c07a');
+  }
+  // 火把
+  for(const sx of [-26, 26]){
+    const fl=0.6+0.4*Math.abs(Math.sin(gtime*4+sx));
+    px(x+sx, y-40, 2, 8, '#3a2a1e');
+    px(x+sx-1, y-44, 4, 4, 'rgba(255,170,60,'+fl.toFixed(2)+')');
+    px(x+sx, y-43, 2, 2, '#ffe9a8');
+  }
 }
 
 // ---------- 商店内部 ----------
