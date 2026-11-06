@@ -1147,6 +1147,7 @@ function update(dt){
   if(atkCd>0) atkCd=Math.max(0,atkCd-dt);
   updateFootParts(dt);
   updateDmgNums(dt);
+  updateFlow();
   updateSlime(dt);
   updateOrbs(dt);
   updateCombatFx(dt);
@@ -4784,6 +4785,7 @@ function drawGate(){
 }
 
 function updateSlime(dt){
+  updateFlow();
   if(playerIframe>0) playerIframe=Math.max(0,playerIframe-dt);
   if(playerHurt>0) playerHurt=Math.max(0,playerHurt-dt);
   if(dead){
@@ -4799,6 +4801,15 @@ function updateSlime(dt){
     return;
   }
   for(const s of slimes){
+    // 自愈：万一卡在障碍里，挤到最近的可走位置
+    if(solidAt(s.x,s.y)){
+      let freed=false;
+      for(let r=8; r<=56 && !freed; r+=8){
+        for(const [ox,oy] of [[0,-r],[0,r],[-r,0],[r,0],[-r,-r],[r,-r],[-r,r],[r,r]]){
+          if(!solidAt(s.x+ox, s.y+oy)){ s.x+=ox; s.y+=oy; freed=true; break; }
+        }
+      }
+    }
     if(s.iframe>0) s.iframe=Math.max(0,s.iframe-dt);
     if(s.hitFlash>0) s.hitFlash=Math.max(0,s.hitFlash-dt);
     if(s.atkAnim>0) s.atkAnim=Math.max(0,s.atkAnim-dt);
@@ -4813,20 +4824,23 @@ function updateSlime(dt){
       const dxn=dx/dist, dyn=dy/dist;
       const step=speed*dt;
       const clear=lineClear(s.x, s.y, player.x, player.y);
-      let vx, vy;
-      if(clear){ vx=dxn; vy=dyn; }
-      else {
-        // 被挡住：沿垂直方向贴墙绕行
-        vx=-dyn*s.side; vy=dxn*s.side;
+      let vx=dxn, vy=dyn;
+      if(!clear){
+        const nxt=flowStep(s);
+        if(nxt){
+          const ndx=nxt.x-s.x, ndy=nxt.y-s.y;
+          const nd=Math.hypot(ndx,ndy)||1;
+          vx=ndx/nd; vy=ndy/nd;
+        }
       }
       const nx=s.x+vx*step, ny=s.y+vy*step;
       if(!solidAt(nx,ny)){ s.x=nx; s.y=ny; s.stuck=0; }
       else {
-        // 该方向也堵住：换边 / 尝试直行
-        s.stuck+=dt;
-        if(s.stuck>0.25){ s.side=-s.side; s.stuck=0; }
         const ax=s.x+dxn*step, ay=s.y+dyn*step;
         if(!solidAt(ax,ay)){ s.x=ax; s.y=ay; }
+        else if(!solidAt(s.x+vx*step, s.y)) s.x+=vx*step;
+        else if(!solidAt(s.x, s.y+vy*step)) s.y+=vy*step;
+        else { s.stuck+=dt; if(s.stuck>0.3){ s.side=-s.side; s.stuck=0; } }
       }
     }
     if(s.atkCd>0) s.atkCd=Math.max(0,s.atkCd-dt);
@@ -4843,6 +4857,69 @@ function updateSlime(dt){
     }
   }
   separateSlimes();
+}
+// ---------- 流场寻路（一次 BFS 供所有怪物使用） ----------
+let flowDist=null, flowTile=-1, flowT=0;
+function tilePassable(tx,ty){
+  if(tx<1||ty<1||tx>=WCOLS-1||ty>=WROWS-1) return false;
+  return !solidAt(tx*TILE+TILE/2, ty*TILE+TILE/2);
+}
+function computeFlow(px,py){
+  const W=WCOLS, H=WROWS;
+  flowDist=new Int32Array(W*H).fill(-1);
+  let sx=Math.floor(px/TILE), sy=Math.floor(py/TILE);
+  if(!tilePassable(sx,sy)){
+    let found=false;
+    for(let r=1;r<=4 && !found;r++){
+      for(let dy=-r;dy<=r && !found;dy++) for(let dx=-r;dx<=r && !found;dx++){
+        if(tilePassable(sx+dx,sy+dy)){ sx+=dx; sy+=dy; found=true; }
+      }
+    }
+    if(!found) return;
+  }
+  const start=sy*W+sx;
+  flowDist[start]=0;
+  const q=new Int32Array(W*H); let head=0, tail=0;
+  q[tail++]=start;
+  while(head<tail){
+    const cur=q[head++];
+    const cx=cur%W, cy=(cur-cx)/W;
+    const d=flowDist[cur]+1;
+    for(let k=0;k<4;k++){
+      const nx=cx+(k===0?1:k===1?-1:0), ny=cy+(k===2?1:k===3?-1:0);
+      if(nx<1||ny<1||nx>=W-1||ny>=H-1) continue;
+      const ni=ny*W+nx;
+      if(flowDist[ni]!==-1) continue;
+      if(!tilePassable(nx,ny)) continue;
+      flowDist[ni]=d; q[tail++]=ni;
+    }
+  }
+}
+function flowStep(s){
+  if(!flowDist) return null;
+  const W=WCOLS;
+  const tx=Math.floor(s.x/TILE), ty=Math.floor(s.y/TILE);
+  if(tx<0||ty<0||tx>=WCOLS||ty>=WROWS) return null;
+  const cur=flowDist[ty*W+tx];
+  let best=null, bestD=cur===-1?1e9:cur;
+  for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+    if(!dx && !dy) continue;
+    const nx=tx+dx, ny=ty+dy;
+    if(nx<1||ny<1||nx>=WCOLS||ny>=WROWS) continue;
+    if(dx&&dy && (!tilePassable(tx+dx,ty) || !tilePassable(tx,ty+dy))) continue;
+    const v=flowDist[ny*W+nx];
+    if(v===-1) continue;
+    if(v<bestD){ bestD=v; best={x:nx*TILE+TILE/2, y:ny*TILE+TILE/2}; }
+  }
+  return best;
+}
+function updateFlow(){
+  const tx=Math.floor(player.x/TILE), ty=Math.floor(player.y/TILE);
+  const key=ty*WCOLS+tx;
+  if(!flowDist || key!==flowTile || gtime-flowT>0.6){
+    computeFlow(player.x, player.y);
+    flowTile=key; flowT=gtime;
+  }
 }
 function lineClear(x0,y0,x1,y1){
   const d=Math.hypot(x1-x0,y1-y0);
