@@ -2187,7 +2187,7 @@ function collectSave(){
     p:{ x:player.x, y:player.y, hp:player.hp, maxHp:player.maxHp, mp:player.mp, maxMp:player.maxMp, speed:120 },
     lv:level, xp:xp, need:xpNeed,
     bag:bagItems.map(e=>[e.id,e.n]),
-    story:{ talked: storyTalked },
+    story:{ talked: storyTalked, shop: shopTalked, officer: officerTalked },
     seen:[...seenItems],
     eq:{ weapons:EQUIP.weapons.slice(), armors:EQUIP.armors.slice(), accessories:EQUIP.accessories.slice() } };
 }
@@ -2217,7 +2217,7 @@ function applySave(s){
       else if(it && ITEMS[it.id]) addItem(it.id, it.n||1);
     }
   }
-  if(s.story) storyTalked=!!s.story.talked;
+  if(s.story){ storyTalked=!!s.story.talked; shopTalked=!!s.story.shop; officerTalked=!!s.story.officer; }
   if(Array.isArray(s.seen)) seenItems=new Set(s.seen.filter(id=>ITEMS[id]));
   if(s.eq){
     const fix=(arr,n)=>{ const out=new Array(n).fill(null);
@@ -4666,7 +4666,7 @@ function updateHudButtons(){
   if(db) db.classList.toggle('hidden', hide || !devMode);
 
   const ab=document.getElementById('atkBtn');
-  if(ab) ab.classList.toggle('hidden', hide || equipOpen || bagOpen || talking);
+  if(ab) ab.classList.toggle('hidden', hide || equipOpen || bagOpen || talking || inShop);
 
   const ib=document.getElementById('interactBtn');
   if(ib){
