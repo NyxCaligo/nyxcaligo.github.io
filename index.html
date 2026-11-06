@@ -1237,6 +1237,12 @@ function buildForestWorld(){
   }
 
   const bcx=Math.round(RIVER_CEN(ROAD_BASE_Y));
+  // 桥跨度：从桥心向左右扫，直到不是水（限制最大 14 格）
+  let bX0=bcx, bX1=bcx;
+  const rowPy=ROAD_BASE_Y*TILE+8;
+  for(let x=bcx; x>=Math.max(1,bcx-14); x--){ if(!forestWaterField(x*TILE+8,rowPy)) break; bX0=x; }
+  for(let x=bcx; x<=Math.min(FW-2,bcx+14); x++){ if(!forestWaterField(x*TILE+8,rowPy)) break; bX1=x; }
+  bX0=Math.max(1, bX0-1); bX1=Math.min(FW-2, bX1+1);
 
   // 2) 2px 精度掩码（与主城完全同一套做法）
   MW=FW*8; MH=FH*8;
@@ -1248,8 +1254,8 @@ function buildForestWorld(){
     if(tx<0||ty<0||tx>=FW||ty>=FH) continue;
     // 水
     let isW = forestWaterField(px,py) ? 1 : 0;
-    // 桥面强制无水
-    if(Math.abs(tx-bcx)<=BRIDGE_HALF_W+1 && Math.abs(ty-ROAD_BASE_Y)<=BRIDGE_HALF_H) isW=0;
+    // 桥面强制无水（整段跨度）
+    if(tx>=bX0 && tx<=bX1 && Math.abs(ty-ROAD_BASE_Y)<=BRIDGE_HALF_H) isW=0;
     if(isW) waterMask[my*MW+mx]=1;
     // 路（距离中心线的带状区域 + 噪声，和主城一样的抖边）
     const cy=roadYAt(px/TILE, bcx);
@@ -1270,7 +1276,7 @@ function buildForestWorld(){
   }
   // 桥面格子强制可走
   for(let y=ROAD_BASE_Y-BRIDGE_HALF_H; y<=ROAD_BASE_Y+BRIDGE_HALF_H; y++){
-    for(let x=bcx-BRIDGE_HALF_W; x<=bcx+BRIDGE_HALF_W; x++){
+    for(let x=bX0; x<=bX1; x++){
       if(x<0||y<0||x>=FW||y>=FH) continue;
       if(w[y][x]!==0) continue;
       water[y*FW+x]=0; road[y*FW+x]=64;
@@ -1296,21 +1302,7 @@ function buildForestWorld(){
       }
     }
   }
-  // 桥：横跨该行的整段水面（左右各外扩 1 格）
-  let wMin=bcx, wMax=bcx;
-  for(let x=0;x<FW;x++){ if(water[ROAD_BASE_Y*FW+x]>0){ if(x<wMin) wMin=x; if(x>wMax) wMax=x; } }
-  for(let y=ROAD_BASE_Y-BRIDGE_HALF_H; y<=ROAD_BASE_Y+BRIDGE_HALF_H; y++){
-    for(let x=wMin-1;x<=wMax+1;x++){
-      if(x<0||y<0||x>=FW||y>=FH) continue;
-      if(w[y][x]!==0) continue;
-      water[y*FW+x]=0; road[y*FW+x]=64;
-      for(let j=0;j<8;j++) for(let i=0;i<8;i++){
-        const mi=(y*8+j)*MW+(x*8+i);
-        waterMask[mi]=0; roadMask[mi]=1;
-      }
-    }
-  }
-  window.__FOREST_BRIDGE={x0:wMin-1, x1:wMax+1, y:ROAD_BASE_Y, hh:BRIDGE_HALF_H};
+  window.__FOREST_BRIDGE={x0:bX0, x1:bX1, y:ROAD_BASE_Y, hh:BRIDGE_HALF_H};
   return {world:w, road, water};
 }
 function forestSolid(x,y){
