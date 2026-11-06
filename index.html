@@ -545,6 +545,7 @@
     <div id="devItems2" style="display:flex; flex-wrap:wrap; gap:6px; width:100%"></div>
     <button id="devAll2" class="sp-full sp-alt">全部物品各 +1</button>
     <button id="devClear2" class="sp-full sp-alt">清空背包</button>
+    <button id="devResetStory2" class="sp-full sp-alt">重置剧情对话</button>
     <button id="devClose" class="sp-full">关闭</button>
   </div>
 </div>
@@ -719,6 +720,7 @@
       <div id="devItems" style="display:flex; flex-wrap:wrap; gap:6px; width:100%"></div>
       <button id="devAll" class="sp-full sp-alt">全部物品各 +1</button>
       <button id="devClear" class="sp-full sp-alt">清空背包</button>
+    <button id="devResetStory" class="sp-full sp-alt">重置剧情对话</button>
     </div>
     <div class="sp-label">数据</div>
     <div class="sp-group">
@@ -2111,6 +2113,12 @@ function applySave(s){
     EQUIP.armors=fix(s.eq.armors,3);
     EQUIP.accessories=fix(s.eq.accessories,6);
   }
+  // 老存档没有任何装备 → 补发内测初始装备
+  if(!EQUIP.weapons.some(Boolean) && !EQUIP.armors.some(Boolean)){
+    EQUIP.weapons=['woodsword',null,null];
+    EQUIP.armors=['woodhelm','woodchest','woodlegs'];
+    try{ ['woodsword','woodhelm','woodchest','woodlegs'].forEach(markSeen); }catch(e){}
+  }
   camXs=Math.max(0,Math.min(WORLD_W-VW, p.x-VW/2));
   camYs=Math.max(0,Math.min(WORLD_H-VH, p.y-VH/2));
   camX=Math.round(camXs*RES)/RES; camY=Math.round(camYs*RES)/RES;
@@ -3240,6 +3248,10 @@ document.getElementById('devClose').onclick=()=>document.getElementById('devWrap
 document.getElementById('devBg').onclick=()=>document.getElementById('devWrap').classList.add('hidden');
 document.getElementById('devAll2').onclick=()=>{ for(const id in ITEMS) addItem(id,1); renderBag(); saveGame(); toastMsg('已加入全部物品'); };
 document.getElementById('devClear2').onclick=()=>{ bagItems=[]; renderBag(); saveGame(); toastMsg('背包已清空'); };
+document.getElementById('devResetStory2').onclick=()=>{
+  storyTalked=false; try{ dlgGiven={}; }catch(e){}
+  saveGame(); toastMsg('剧情已重置，可再次与艾琳对话');
+};
 function syncDevUI(){
   const l=document.getElementById('devLabel'), g=document.getElementById('devGroup');
   if(l) l.style.display = devMode?'':'none';
@@ -3292,6 +3304,11 @@ document.getElementById('devAll').onclick=()=>{
 };
 document.getElementById('devClear').onclick=()=>{
   bagItems=[]; renderBag(); saveGame(); toastMsg('背包已清空');
+};
+document.getElementById('devResetStory').onclick=()=>{
+  storyTalked=false;
+  try{ dlgGiven={}; }catch(e){}
+  saveGame(); toastMsg('剧情已重置，可再次与艾琳对话');
 };
 
 let confirmCb=null, confirmTimer=null;
