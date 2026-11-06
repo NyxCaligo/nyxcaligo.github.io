@@ -1295,21 +1295,21 @@ function buildForestWorld(){
       }
     }
   }
-  // 桥两端各开一块 5×5 的硬地，避免衔接处卡人
-  for(const ex of [bcx-BRIDGE_HALF_W-2, bcx+BRIDGE_HALF_W+2]){
-    for(let y=ROAD_BASE_Y-3;y<=ROAD_BASE_Y+3;y++){
-      for(let x=ex-2;x<=ex+2;x++){
-        if(x<0||y<0||x>=FW||y>=FH) continue;
-        if(w[y][x]!==0) continue;
-        water[y*FW+x]=0; road[y*FW+x]=64;
-        for(let j=0;j<8;j++) for(let i=0;i<8;i++){
-          const mi=(y*8+j)*MW+(x*8+i);
-          waterMask[mi]=0; roadMask[mi]=1;
-        }
+  // 桥：横跨该行的整段水面（左右各外扩 1 格）
+  let wMin=bcx, wMax=bcx;
+  for(let x=0;x<FW;x++){ if(water[ROAD_BASE_Y*FW+x]>0){ if(x<wMin) wMin=x; if(x>wMax) wMax=x; } }
+  for(let y=ROAD_BASE_Y-BRIDGE_HALF_H; y<=ROAD_BASE_Y+BRIDGE_HALF_H; y++){
+    for(let x=wMin-1;x<=wMax+1;x++){
+      if(x<0||y<0||x>=FW||y>=FH) continue;
+      if(w[y][x]!==0) continue;
+      water[y*FW+x]=0; road[y*FW+x]=64;
+      for(let j=0;j<8;j++) for(let i=0;i<8;i++){
+        const mi=(y*8+j)*MW+(x*8+i);
+        waterMask[mi]=0; roadMask[mi]=1;
       }
     }
   }
-  window.__FOREST_BRIDGE={x:bcx, y:ROAD_BASE_Y, hw:BRIDGE_HALF_W, hh:BRIDGE_HALF_H};
+  window.__FOREST_BRIDGE={x0:wMin-1, x1:wMax+1, y:ROAD_BASE_Y, hh:BRIDGE_HALF_H};
   return {world:w, road, water};
 }
 function forestSolid(x,y){
@@ -1324,7 +1324,7 @@ function setMap(name){
   if(name===mapName) return;
   if(!townData){
     townData={ world, road:tileRoadCnt, water:tileWaterCnt, buildings:BUILDINGS, props:PROPS,
-               W:WCOLS, H:WROWS };
+               W:WCOLS, H:WROWS, MW, MH, waterMask, roadMask };
   }
   mapName=name;
   if(name==='forest'){
@@ -1338,6 +1338,7 @@ function setMap(name){
     WCOLS=townData.W; WROWS=townData.H;
     world=townData.world; tileRoadCnt=townData.road; tileWaterCnt=townData.water;
     BUILDINGS=townData.buildings; PROPS=townData.props;
+    MW=townData.MW; MH=townData.MH; waterMask=townData.waterMask; roadMask=townData.roadMask;
   }
   WORLD_W=WCOLS*TILE; WORLD_H=WROWS*TILE;
   chunkCache.clear();
@@ -2205,8 +2206,8 @@ function drawForestWall(sx,sy,tx,ty){
   }
 }
 function drawForestBridge(){
-  const info=(typeof window!=='undefined'&&window.__FOREST_BRIDGE)||{x:Math.round(RIVER_CEN(76)),y:76,hw:3,hh:2};
-  const b={ x:(info.x-info.hw-1)*TILE, y:(info.y-1)*TILE, w:(info.hw*2+3)*TILE, h:3*TILE };
+  const info=(typeof window!=='undefined'&&window.__FOREST_BRIDGE)||{x0:0,x1:0,y:76,hh:1};
+  const b={ x:info.x0*TILE, y:(info.y-info.hh)*TILE, w:(info.x1-info.x0+1)*TILE, h:(info.hh*2+1)*TILE };
   const x=b.x-camX, y=b.y-camY, w=b.w, h=b.h;
   if(x>VW+40 || x+w<-40) return;
   px(x, y, w, h, '#9a7248');
