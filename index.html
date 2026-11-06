@@ -549,8 +549,8 @@
 </div>
 <button id="reviveBtn" class="hidden">复活</button>
 <div id="errBox" style="position:fixed;left:50%;bottom:60px;transform:translateX(-50%);z-index:99;display:none;max-width:86vw;padding:8px 12px;background:rgba(120,20,20,.92);color:#fff;font-size:11px;border:1px solid #f87171"></div>
-<div id="mobWrap" class="modal hidden" style="z-index:15; align-items:flex-start; padding-top:8vh;">
-  <div class="modal-bg" id="mobBg"></div>
+<div id="mobWrap" class="modal hidden" style="z-index:15; align-items:center; background:rgba(5,8,14,.35);">
+  <div style="position:absolute; inset:0" id="mobBg"></div>
   <div class="modal-box" style="width:min(280px,80vw); padding:14px">
     <div class="panel-head">
       <span class="pixlabel" id="mobTitle"></span>
@@ -3712,8 +3712,9 @@ function closeConfirm(){
   clearTimeout(confirmTimer); confirmTimer=null;
   document.getElementById('confirmWrap').classList.add('hidden');
 }
-function askConfirm(msg, cb, yesLabel, noLabel){
-  confirmCb=cb;
+let confirmNoCb=null;
+function askConfirm(msg, cb, yesLabel, noLabel, noCb){
+  confirmCb=cb; confirmNoCb=noCb||null;
   document.getElementById('confirmMsg').textContent=msg;
   const y=document.getElementById('confirmYes'), n=document.getElementById('confirmNo');
   if(y) y.textContent=yesLabel||'确定';
@@ -3727,11 +3728,11 @@ document.getElementById('confirmYes').onclick=(e)=>{
   const f=confirmCb; closeConfirm();
   if(f) f();
 };
-document.getElementById('confirmNo').onclick=(e)=>{ e.stopPropagation(); closeConfirm(); };
-document.getElementById('confirmBg').onclick=closeConfirm;
+document.getElementById('confirmNo').onclick=(e)=>{ e.stopPropagation(); const n=confirmNoCb; closeConfirm(); if(n) n(); };
+document.getElementById('confirmBg').onclick=()=>{ const n=confirmNoCb; closeConfirm(); if(n) n(); };
 document.getElementById('confirmWrap').onclick=(e)=>{
   if(e.target.id==='confirmYes' || e.target.id==='confirmNo') return;
-  closeConfirm();
+  const n=confirmNoCb; closeConfirm(); if(n) n();
 };
 
 let bagDragV=null, bagDragT=null;
@@ -3983,13 +3984,25 @@ document.getElementById('muteAll').onclick=()=>{
 
 // ---------- 暂停 / 折叠 / 存档提示 / 小地图 / 环境 ----------
 let paused=false, equipHudOn=true, gtime=0, saveMsgT=-99, showFps=false, showMini=false;
-function doExit(){
+function doExit(wasPaused){
   askConfirm('确定要退出游戏网页吗？', ()=>{
     try{ window.close(); }catch(e){}
     setTimeout(()=>{ try{ document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100vh;color:#93c5fd;font-size:18px">已退出，可关闭页面</div>'; }catch(e){} }, 80);
-  }, '是', '否');
+  }, '是', '否', ()=>{
+    // 取消：恢复游戏运行，不留在暂停
+    paused=false; pausedAutoMenu=false; pausedAuto=false;
+    try{ syncPauseIcon(); }catch(e){}
+    try{ updateHudButtons(); }catch(e){}
+    try{ document.getElementById('menuWrap').classList.add('hidden'); }catch(e){}
+  });
 }
-document.getElementById('exitBtn').onclick=()=>{ document.getElementById('menuWrap').classList.add('hidden'); doExit(); };
+document.getElementById('exitBtn').onclick=()=>{
+  document.getElementById('menuWrap').classList.add('hidden');
+  const wasPaused = pausedAutoMenu;
+  paused=false; pausedAutoMenu=false;
+  syncPauseIcon();
+  doExit(wasPaused);
+};
 const teb=document.getElementById('titleExitBtn');
 if(teb) teb.onclick=doExit;
 const tfb=document.getElementById('titleFsBtn');
@@ -5022,7 +5035,18 @@ function updateOrbs(dt){
     const dx=player.x-o.x, dy=player.y-6-o.y, d=Math.hypot(dx,dy)||1;
     if(d<32){ o.vx+=dx/d*420*dt; o.vy+=dy/d*420*dt; }
     o.vx*=Math.pow(0.12,dt); o.vy*=Math.pow(0.12,dt);
-    o.x+=o.vx*dt; o.y+=o.vy*dt;
+    const nx2=o.x+o.vx*dt, ny2=o.y+o.vy*dt;
+    if(!solidAt(nx2,o.y)) o.x=nx2; else o.vx*=-0.35;
+    if(!solidAt(o.x,ny2)) o.y=ny2; else o.vy*=-0.35;
+    // 万一卡进实体，逐步推出来
+    if(solidAt(o.x,o.y)){
+      let freed=false;
+      for(let r=6; r<=48 && !freed; r+=6){
+        for(const [ox,oy] of [[0,-r],[0,r],[-r,0],[r,0],[-r,-r],[r,-r],[-r,r],[r,r]]){
+          if(!solidAt(o.x+ox,o.y+oy)){ o.x+=ox; o.y+=oy; freed=true; break; }
+        }
+      }
+    }
     if(d<8){
       if(o.kind==='xp'){ gainXp(o.val||4); sfxXp(); }
       else { money+=(o.val||1); sfxCoin(); }
@@ -5197,8 +5221,6 @@ function openMobDetail(key){
     ['生命值', String(m.hp)],
     ['护甲值', String(m.armor)],
     ['攻击伤害', String(m.dmg)],
-    ['击杀经验', String(m.xp)],
-    ['掉落物', m.coin+'、'+m.drops.join('、')],
     ['移动速度', String(m.speed)],
     ['攻击击退', String(m.kb)],
     ['受击退（重量）', String(m.weight)]
@@ -5208,6 +5230,10 @@ function openMobDetail(key){
     d.innerHTML='<span>'+k+'</span><b>'+v+'</b>';
     body.appendChild(d);
   }
+  const drop=document.createElement('div');
+  drop.className='detail-row';
+  drop.innerHTML='<span>掉落</span><b>铜币 '+m.coin.replace(' 铜币','')+' · 经验 '+m.xp+'</b>';
+  body.appendChild(drop);
   const de=document.createElement('div');
   de.style.cssText='font-size:11px;color:#8fb3d9;margin-top:6px;text-align:center';
   de.textContent=m.desc;
