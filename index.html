@@ -4757,24 +4757,31 @@ function hitDummy(){
 }
 function drawInteractMarkers(){
   if(!interactTarget) return;
-  let tx=null, ty=null, isStory=false;
+  // NPC：统一感叹号（有重要剧情=金色，否则白色）；其他互动物件：星星
   if(interactTarget.k==='npc'){
-    if(interactTarget.npc==='erin'){ tx=NPC.x; ty=NPC.y; isStory=true; }
+    let tx=null, ty=null;
+    if(interactTarget.npc==='erin'){ tx=NPC.x; ty=NPC.y; }
     else if(interactTarget.npc==='elder'){ tx=ELDER.x; ty=ELDER.y; }
     else if(interactTarget.npc==='officer'){ tx=OFFICER.x; ty=OFFICER.y; }
-  }
-  if(tx===null) return;
-  const bx=Math.round(tx-camX), by=Math.round(ty-camY);
-  octx.strokeStyle='rgba(255,255,255,.85)'; octx.lineWidth=1;
-  octx.strokeRect(bx-8, by-14, 17, 25);
-  if(isStory){
-    // 剧情 NPC：金色感叹号
+    if(tx===null) return;
+    const important = (interactTarget.npc==='erin' && !storyTalked) ||
+                      (interactTarget.npc==='elder' && !shopTalked);
+    const bx=Math.round(tx-camX), by=Math.round(ty-camY);
+    octx.strokeStyle='rgba(255,255,255,.85)'; octx.lineWidth=1;
+    octx.strokeRect(bx-8, by-14, 17, 25);
+    const col = important ? '#f5c542' : '#f2f5f9';
     px(bx-4, by-32, 9, 12, '#0b0f1a');
-    px(bx-3, by-31, 7, 10, '#f5c542');
+    px(bx-3, by-31, 7, 10, col);
     px(bx, by-29, 1, 5, '#0b0f1a');
     px(bx, by-23, 1, 1, '#0b0f1a');
-  } else {
-    drawStar(bx, by-32, 1);
+    return;
+  }
+  if(interactTarget.k==='door'){
+    drawStar(Math.round(SHOP_DOOR.x-camX)+14, Math.round(SHOP_DOOR.y-camY)-18, 1);
+    return;
+  }
+  if(interactTarget.k==='drop'){
+    drawStar(Math.round(interactTarget.d.x-camX), Math.round(interactTarget.d.y-camY)-20, 0.9);
   }
 }
 function drawStar(cx,cy,k){
