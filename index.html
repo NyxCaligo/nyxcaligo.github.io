@@ -1189,17 +1189,37 @@ let forestWorld=null, forestRoad=null, forestWater=null, forestMobs=[];
 let townData=null;
 const RIVER_CEN=(y)=> 78 + Math.sin(y*0.055)*9 + Math.sin(y*0.017+2.0)*5;
 const ROAD_BASE_Y=76;
-const BRIDGE_HALF_W=3;      // 桥半宽（格）
+const BRIDGE_HALF_W=3;
 const BRIDGE_HALF_H=1;
-function roadYAt(x){
+// 路面中心线：远离桥时弯曲，靠近桥强制拉直（保证左右对齐）
+function roadYAt(x, bcx){
+  const d=Math.abs(x-bcx);
+  const flat=Math.min(1, Math.max(0, (d-4)/14));   // 4 格内完全平直
   const wob=Math.sin(x*0.06)*6 + Math.sin(x*0.021+1.2)*9;
-  return Math.round(ROAD_BASE_Y + wob);
+  return ROAD_BASE_Y + wob*flat;
+}
+// 连续水场：湖(多圆并集)+河，2px 精度采样，边缘带噪声
+function forestWaterField(px,py){
+  const tx=px/TILE, ty=py/TILE;
+  // 河
+  const rc=RIVER_CEN(ty);
+  const rw=3.1 + Math.sin(ty*0.11)*1.0;
+  const dn=Math.abs(tx-rc) + (hash(Math.floor(px/2),Math.floor(py/2))-0.5)*0.55;
+  if(dn<rw) return 1;
+  // 湖（多个圆并集，低频噪声扰动半径）
+  const circles=[[26,120,21],[46,118,19],[62,122,17],[20,102,15],[40,104,13]];
+  for(const [cx,cy,r] of circles){
+    const d=Math.hypot(tx-cx, (ty-cy)*1.05);
+    const rr=r + (hash(Math.floor(px/4)+7, Math.floor(py/4)+3)-0.5)*3.2
+               + Math.sin(px*0.012)*1.4 + Math.sin(py*0.010+1.1)*1.4;
+    if(d<rr) return 1;
+  }
+  return 0;
 }
 function buildForestWorld(){
   const w=[];
   for(let y=0;y<FH;y++){ const row=[]; for(let x=0;x<FW;x++) row.push(0); w.push(row); }
   const road=new Uint8Array(FW*FH), water=new Uint8Array(FW*FH);
-  const isBorder=(x,y)=> x<1||y<1||x>=FW-1||y>=FH-1;
 
   // 1) 边界：整圈包裹
   for(let y=0;y<FH;y++){
@@ -1215,107 +1235,67 @@ function buildForestWorld(){
     for(let y=FH-tB;y<FH;y++) if(y>=0) w[y][x]=1;
   }
 
-  // 2) 河
-  for(let y=0;y<FH;y++){
-    const cx=RIVER_CEN(y), halfW=3.2+Math.sin(y*0.11)*1.1;
-    for(let x=Math.floor(cx-halfW);x<=Math.ceil(cx+halfW);x++){
-      if(x<0||x>=FW) continue;
-      water[y*FW+x]=1;
-    }
-  }
-
-  // 3) 湖：左下角，边缘用低频平滑曲线（减少小触手）
-  for(let y=70;y<FH;y++) for(let x=0;x<92;x++){
-    const t=(y-76)/Math.max(1,(FH-78));
-    const topEdge = 116 - t*42 + Math.sin(x*0.055)*4.5 + Math.sin(x*0.021+1.7)*5.5;
-    const rightEdge = 88 - t*30 + Math.sin(y*0.05+0.9)*4 + Math.sin(y*0.019+2.4)*6;
-    if(y>topEdge && x<rightEdge) water[y*FW+x]=1;
-  }
-
-  // 3b) 填平河与湖之间的缺口（右下连成一片）
-  for(let y=96;y<FH;y++){
-    const rc=Math.round(RIVER_CEN(y))+4;
-    for(let x=0;x<rc && x<FW;x++){
-      if(y>110 || x<78){
-        if(w[y][x]===0) water[y*FW+x]=1;
-      }
-    }
-  }
-  // 4) 桥：路面在桥段强制拉直对齐
   const bcx=Math.round(RIVER_CEN(ROAD_BASE_Y));
-  // 4a) 先把桥两侧的路压平到 ROAD_BASE_Y
-  for(let x=bcx-14;x<=bcx+14;x++){
-    const wgt=Math.min(1, Math.abs(x-bcx)/10);
-    for(let dy=-1;dy<=1;dy++){
-      const y=Math.round(ROAD_BASE_Y + (roadYAt(x)-ROAD_BASE_Y)*wgt) + dy;
-      if(x<0||y<0||x>=FW||y>=FH) continue;
-      if(w[y][x]!==0) continue;
-      road[y*FW+x]=1;
-    }
-  }
-  // 4b) 桥面：矩形可走，清空水
-  for(let y=ROAD_BASE_Y-BRIDGE_HALF_H; y<=ROAD_BASE_Y+BRIDGE_HALF_H; y++){
-    for(let x=bcx-BRIDGE_HALF_W; x<=bcx+BRIDGE_HALF_W; x++){
-      if(x<0||y<0||x>=FW||y>=FH) continue;
-      if(w[y][x]!==0) continue;
-      water[y*FW+x]=0; road[y*FW+x]=1;
-    }
-  }
-  // 4c) 桥两端再清一小段，保证与主路衔接
-  for(let x=bcx-BRIDGE_HALF_W-2; x<=bcx+BRIDGE_HALF_W+2; x++){
-    for(let y=ROAD_BASE_Y-1;y<=ROAD_BASE_Y+1;y++){
-      if(x<0||y<0||x>=FW||y>=FH) continue;
-      if(w[y][x]!==0) continue;
-      water[y*FW+x]=0; road[y*FW+x]=1;
-    }
-  }
 
-  // 5) 主路：整条铺（弯曲），但遇到湖/河的水就停（桥段已单独处理）
-  for(let x=2;x<FW-2;x++){
-    const y0=roadYAt(x);
-    for(let dy=-1;dy<=1;dy++){
-      const y=y0+dy;
-      if(x<0||y<0||x>=FW||y>=FH) continue;
-      if(w[y][x]!==0) continue;
-      if(water[y*FW+x] && !(Math.abs(x-bcx)<=BRIDGE_HALF_W+2 && Math.abs(y-ROAD_BASE_Y)<=BRIDGE_HALF_H)) continue;
-      road[y*FW+x]=1;
-    }
-  }
-  // 水上的路一律无效
-  for(let i=0;i<FW*FH;i++){ if(water[i]) road[i]=0; }
-  // 桥面最终强制可走
-  for(let y=ROAD_BASE_Y-BRIDGE_HALF_H; y<=ROAD_BASE_Y+BRIDGE_HALF_H; y++){
-    for(let x=bcx-BRIDGE_HALF_W; x<=bcx+BRIDGE_HALF_W; x++){
-      if(x<0||y<0||x>=FW||y>=FH) continue;
-      if(w[y][x]!==0) continue;
-      water[y*FW+x]=0; road[y*FW+x]=1;
-    }
-  }
-  window.__FOREST_BRIDGE={x:bcx, y:ROAD_BASE_Y, hw:BRIDGE_HALF_W, hh:BRIDGE_HALF_H};
-
-  // 6) 掩码（道路 2px 抖动边缘）
+  // 2) 2px 精度掩码（与主城完全同一套做法）
   MW=FW*8; MH=FH*8;
   waterMask=new Uint8Array(MW*MH);
   roadMask=new Uint8Array(MW*MH);
+  for(let my=0;my<MH;my++) for(let mx=0;mx<MW;mx++){
+    const px=mx*2+1, py=my*2+1;
+    const tx=Math.floor(px/TILE), ty=Math.floor(py/TILE);
+    if(tx<0||ty<0||tx>=FW||ty>=FH) continue;
+    // 水
+    let isW = forestWaterField(px,py) ? 1 : 0;
+    // 桥面强制无水
+    if(Math.abs(tx-bcx)<=BRIDGE_HALF_W+1 && Math.abs(ty-ROAD_BASE_Y)<=BRIDGE_HALF_H) isW=0;
+    if(isW) waterMask[my*MW+mx]=1;
+    // 路（距离中心线的带状区域 + 噪声，和主城一样的抖边）
+    const cy=roadYAt(px/TILE, bcx);
+    const dRoad=Math.abs(py/TILE - cy) + (hash(mx*7+3, my*5+1)-0.5)*0.55;
+    if(dRoad<1.55) roadMask[my*MW+mx]=1;
+  }
+  // 由掩码反推格子（多数表决），保证视觉=碰撞
   for(let ty=0;ty<FH;ty++) for(let tx=0;tx<FW;tx++){
-    const isWater=water[ty*FW+tx]>0, isRoad=road[ty*FW+tx]>0;
-    if(isWater){
-      const nb = (ty>0?water[(ty-1)*FW+tx]:1) && (ty<FH-1?water[(ty+1)*FW+tx]:1)
-              && (tx>0?water[ty*FW+tx-1]:1) && (tx<FW-1?water[ty*FW+tx+1]:1);
-      for(let j=0;j<8;j++) for(let i=0;i<8;i++){
-        const edge=(i===0||i===7||j===0||j===7);
-        const jitter=(hash(tx*8+i+77, ty*8+j+31)-0.5)*2;
-        if(!edge || nb || jitter>0.25) waterMask[(ty*8+j)*MW+(tx*8+i)]=1;
-      }
+    let wc=0, rc=0, tot=0;
+    for(let j=0;j<8;j++) for(let i=0;i<8;i++){
+      const mi=(ty*8+j)*MW+(tx*8+i);
+      tot++;
+      wc+=waterMask[mi]?1:0;
+      rc+=roadMask[mi]?1:0;
     }
-    if(isRoad){
+    if(wc>tot*0.35) water[ty*FW+tx]=64;
+    if(rc>tot*0.35 && water[ty*FW+tx]===0) road[ty*FW+tx]=64;
+  }
+  // 桥面格子强制可走
+  for(let y=ROAD_BASE_Y-BRIDGE_HALF_H; y<=ROAD_BASE_Y+BRIDGE_HALF_H; y++){
+    for(let x=bcx-BRIDGE_HALF_W; x<=bcx+BRIDGE_HALF_W; x++){
+      if(x<0||y<0||x>=FW||y>=FH) continue;
+      if(w[y][x]!==0) continue;
+      water[y*FW+x]=0; road[y*FW+x]=64;
       for(let j=0;j<8;j++) for(let i=0;i<8;i++){
-        const edge=(i===0||i===7||j===0||j===7);
-        if(!edge || (hash(tx*8+i, ty*8+j)-0.5)*2>0.1) roadMask[(ty*8+j)*MW+(tx*8+i)]=1;
+        const mi=(y*8+j)*MW+(x*8+i);
+        waterMask[mi]=0; roadMask[mi]=1;
       }
     }
   }
-  for(let i=0;i<FW*FH;i++){ road[i]=road[i]?64:0; water[i]=water[i]?64:0; }
+  // 水上的路作废；边界（土块）上的路也作废
+  for(let i=0;i<FW*FH;i++){ if(water[i]) road[i]=0; }
+  for(let y=0;y<FH;y++) for(let x=0;x<FW;x++){
+    if(w[y][x]!==0) road[y*FW+x]=0;
+  }
+  // 入口小空地（西侧，切开边界一小段）
+  for(let y=ROAD_BASE_Y-2;y<=ROAD_BASE_Y+2;y++){
+    for(let x=2;x<=13;x++){
+      if(x<0||y<0||x>=FW||y>=FH) continue;
+      w[y][x]=0; water[y*FW+x]=0; road[y*FW+x]=64;
+      for(let j=0;j<8;j++) for(let i=0;i<8;i++){
+        const mi=(y*8+j)*MW+(x*8+i);
+        waterMask[mi]=0; roadMask[mi]=1;
+      }
+    }
+  }
+  window.__FOREST_BRIDGE={x:bcx, y:ROAD_BASE_Y, hw:BRIDGE_HALF_W, hh:BRIDGE_HALF_H};
   return {world:w, road, water};
 }
 function forestSolid(x,y){
