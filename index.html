@@ -158,6 +158,22 @@
   .col-tabs button { flex:1; padding:8px 0; font-size:13px; background:#4b5462; color:#cbd5e1;
                      border:2px solid #0b0f1a; border-radius:0; box-shadow:none; }
   .col-tabs button.on { background:#f5c542; color:#3b2a1c; border-color:#8a6a1a; }
+  #bagWrap .modal-box { background:linear-gradient(180deg,#3a3524,#26220f); border-color:#8a6a1f;
+    box-shadow:0 0 0 2px #1c1708, 0 0 20px rgba(245,197,66,.25); }
+  #bagWrap .panel-head .pixlabel { color:#ffe9a8; }
+  #bagWrap .eq-slot { background:#2f2b1a; border-color:#1c1708; box-shadow:inset 0 2px 0 #5a5030; }
+  #bagWrap #bagMultiBtn, #bagWrap #bagSort { background:linear-gradient(180deg,#8a6a1f,#5c4514); border-color:#1c1708; color:#ffe9a8; }
+  #craftWrap .modal-box { background:linear-gradient(180deg,#3b414b,#262b33); border-color:#5b6472;
+    box-shadow:0 0 0 2px #141821, 0 0 20px rgba(140,150,165,.22); }
+  #craftWrap .pixlabel { color:#d7dee8; }
+  #craftWrap .sp-full, #craftWrap .miniBtn { background:linear-gradient(180deg,#6b7480,#474e59); border-color:#1a1f27; color:#f1f5f9; }
+  #colWrap .modal-box { background:linear-gradient(180deg,#1f3d2a,#12291c); border-color:#2f7d4a;
+    box-shadow:0 0 0 2px #0c1f14, 0 0 20px rgba(47,125,74,.3); }
+  #colWrap .pixlabel { color:#b8e6c8; }
+  #colWrap .col-slot { background:#163023; border-color:#0c1f14; }
+  #charWrap .modal-box { background:linear-gradient(180deg,#3a2b4d,#241a33); border-color:#6b4a9a;
+    box-shadow:0 0 0 2px #1a1026, 0 0 20px rgba(140,100,200,.28); }
+  #charWrap .pixlabel { color:#d8c8f0; }
   #colWrap .modal-bg { background:transparent; }
   #colWrap { padding:10px 0; }
   #colWrap .modal-box { width:min(320px,54vw); margin-left:96px; max-height:84vh; overflow:hidden;
@@ -527,7 +543,7 @@
       <button class="xBtn" id="recipeClose">✕</button>
     </div>
     <div id="recipeBody" style="width:100%"></div>
-    <button id="recipeCraft" class="sp-full">合成</button>
+    <button id="recipeCraft" class="sp-full"><svg width="16" height="16" viewBox="0 0 12 12" shape-rendering="crispEdges" style="vertical-align:-3px;margin-right:6px"><rect x="5" y="1" width="2" height="6" fill="#e2e8f0"/><rect x="3" y="5" width="6" height="2" fill="#e2e8f0"/><rect x="4" y="7" width="4" height="1" fill="#94a3b8"/><rect x="4" y="9" width="4" height="2" fill="#cbd5e1"/></svg>合成</button>
   </div>
 </div>
 <div id="charWrap" class="modal hidden" style="z-index:11; align-items:flex-start; justify-content:flex-start; padding-top:8px;">
@@ -715,7 +731,7 @@
 <div id="itemMenu" class="hidden">
   <div class="item-menu" id="itemMenuBox"></div>
 </div>
-<div id="buyWrap" class="hidden">
+<div id="buyWrap" class="hidden" style="position:fixed; inset:0; z-index:24">
   <div class="detail-box" id="buyBox" style="position:fixed; z-index:16; border-color:#3a2a18">
     <div class="detail-head">
       <span id="buyIcon"></span>
@@ -725,9 +741,11 @@
     <div class="detail-row"><span>单价</span><b id="buyPrice">7 铜</b></div>
     <div style="display:flex;align-items:center;gap:6px;margin:8px 0;width:100%">
       <span style="font-size:11px;color:#8fb3d9">数量</span>
+      <button id="buyMinus" style="width:28px;height:28px;padding:0;font-size:16px">−</button>
       <input id="buyQty" type="number" min="1" value="1"
-             style="flex:1;background:#0a1018;border:2px solid #1e293b;color:#e2e8f0;font-family:inherit;font-size:12px;padding:4px;text-align:center">
-      <span id="buyTotal" style="font-size:11px;color:#fde68a"></span>
+             style="width:52px;background:#0a1018;border:2px solid #1e293b;color:#e2e8f0;font-family:inherit;font-size:12px;padding:4px;text-align:center">
+      <button id="buyPlus" style="width:28px;height:28px;padding:0;font-size:16px">+</button>
+      <span id="buyTotal" style="font-size:11px;color:#fde68a;flex:1;text-align:right"></span>
     </div>
     <button id="buyOk" class="sp-full">购买</button>
   </div>
@@ -1150,6 +1168,11 @@ function solidAt(px,py){
     else continue;
     if(px>=x0&&px<=x1&&py>=y0&&py<=y1) return true;
   }
+  // NPC 与假人的碰撞（小体积，避免卡住）
+  if(Math.hypot(px-NPC.x, py-NPC.y) < 8) return true;
+  if(Math.hypot(px-ELDER.x, py-ELDER.y) < 7) return true;
+  if(Math.hypot(px-OFFICER.x, py-OFFICER.y) < 7) return true;
+  if(Math.hypot(px-DUMMY.x, py-DUMMY.y) < 7) return true;
   if(waterAt(px,py)) return true;
   return false;
 }
@@ -1182,6 +1205,7 @@ function update(dt){
   }
   const mag=Math.hypot(mvx,mvy);
   if(mag>0){
+    hideToastNow();
     tryMove(mvx/mag*player.speed*dt, mvy/mag*player.speed*dt);
     walkPhase += dt*16;
     const si=Math.floor(walkPhase/Math.PI);
@@ -3461,9 +3485,11 @@ document.getElementById('quadBtn').onclick=()=>{
 document.querySelectorAll('#quadItems button').forEach(b=>{
   b.onclick=(e)=>{
     e.stopPropagation();
-    setQuad(false);
+    // 保持四方格展开，只重置自动回收计时
     const t=document.getElementById(b.dataset.p+'Btn');
     if(t && typeof t.onclick==='function') t.onclick();
+    clearTimeout(quadTimer);
+    quadTimer=setTimeout(()=>setQuad(false), 3800);
     sfxBeep();
   };
   b.addEventListener('touchstart', (e)=>{ e.stopPropagation(); clearTimeout(quadTimer); quadTimer=setTimeout(()=>setQuad(false),3800); }, {passive:true});
@@ -4362,11 +4388,19 @@ function updateInteract(){
   nearNpc=!!best;
   updateHudButtons();
 }
+let toastText='';
 function toastMsg(t){
   const el=document.getElementById('msgToast'); if(!el) return;
-  el.textContent=t; el.style.opacity='1';
+  el.textContent=t; el.style.opacity='1'; toastText=String(t||'');
   clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>{ el.style.opacity='0'; }, 600);
+  const ms=Math.min(4200, 700 + toastText.length*160);
+  toastTimer=setTimeout(()=>{ el.style.opacity='0'; }, ms);
+}
+function hideToastNow(){
+  if(!toastText) return;
+  const el=document.getElementById('msgToast');
+  if(el){ el.style.opacity='0'; }
+  toastText=''; clearTimeout(toastTimer);
 }
 document.getElementById('interactBtn').onclick=()=>{
   if(talking || !interactTarget) return;
@@ -5570,6 +5604,7 @@ function openBuyPopup(id, price, anchor){
   document.getElementById('buyQty').value='1';
   buyRefreshTotal();
   const wrap=document.getElementById('buyWrap'), box=document.getElementById('buyBox');
+  wrap.style.display='block';
   wrap.classList.remove('hidden');
   const ar = anchor ? anchor.getBoundingClientRect()
                     : {left:innerWidth/2, top:innerHeight*0.35, right:innerWidth/2};
@@ -5583,8 +5618,16 @@ function openBuyPopup(id, price, anchor){
   sfxBeep();
 }
 document.getElementById('buyQty').oninput=buyRefreshTotal;
-document.getElementById('buyClose').onclick=()=>{ document.getElementById('buyWrap').classList.add('hidden'); buyCur=null; };
-document.getElementById('buyWrap').onclick=(e)=>{ if(e.target.id==='buyWrap'){ document.getElementById('buyWrap').classList.add('hidden'); buyCur=null; } };
+function buyStep(d){
+  const el=document.getElementById('buyQty');
+  const v=Math.max(1, Math.floor(Number(el.value)||1)+d);
+  el.value=String(Math.min(99,v));
+  buyRefreshTotal(); sfxBeep();
+}
+document.getElementById('buyMinus').onclick=(e)=>{ e.stopPropagation(); buyStep(-1); };
+document.getElementById('buyPlus').onclick=(e)=>{ e.stopPropagation(); buyStep(1); };
+document.getElementById('buyClose').onclick=()=>{ document.getElementById('buyWrap').classList.add('hidden'); document.getElementById('buyWrap').style.display=''; buyCur=null; };
+document.getElementById('buyWrap').onclick=(e)=>{ if(e.target.id==='buyWrap'){ document.getElementById('buyWrap').classList.add('hidden'); document.getElementById('buyWrap').style.display=''; buyCur=null; } };
 document.getElementById('buyOk').onclick=(e)=>{
   e.stopPropagation();
   if(!buyCur) return;
