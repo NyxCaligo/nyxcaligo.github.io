@@ -258,6 +258,21 @@
   #quadItems.open button:nth-child(3){ transition-delay:90ms; }
   #quadItems.open button:nth-child(4){ transition-delay:135ms; }
   #quadItems:not(.open) button { pointer-events:none; }
+  #quadItems button:active { transform:scale(.9); }
+  .quad-ring { position:fixed; width:8px; height:8px; margin:-4px 0 0 -4px; border:2px solid #7cc0ff;
+               border-radius:50%; pointer-events:none; z-index:30; opacity:.95;
+               animation:quadRing .52s cubic-bezier(.2,.9,.3,1) forwards; }
+  @keyframes quadRing { 0%{ transform:scale(.4); opacity:.95 } 100%{ transform:scale(7.5); opacity:0 } }
+  .quad-spark { position:fixed; width:5px; height:5px; margin:-2.5px 0 0 -2.5px; pointer-events:none;
+                z-index:30; box-shadow:0 0 6px currentColor;
+                animation:quadSpark .48s cubic-bezier(.15,.9,.3,1) forwards; }
+  @keyframes quadSpark {
+    0% { transform:translate(0,0) scale(1); opacity:1 }
+    70% { opacity:.9 }
+    100% { transform:translate(var(--dx),var(--dy)) scale(.25); opacity:0 }
+  }
+  .modal:not(.hidden) .modal-box { animation:panelPop .18s cubic-bezier(.2,1.3,.4,1); }
+  @keyframes panelPop { 0%{ transform:scale(.96) translateY(6px); opacity:.6 } 100%{ transform:none; opacity:1 } }
   #charBtn { position:fixed; z-index:12; left:calc(10px + env(safe-area-inset-left, 0px));
              bottom:calc(172px + env(safe-area-inset-bottom, 0px)); width:46px; height:46px; padding:0;
              display:flex; align-items:center; justify-content:center; }
@@ -3494,9 +3509,35 @@ document.getElementById('quadBtn').onclick=()=>{
   }catch(e){}
   if(typeof updateHudButtons==='function') updateHudButtons();
 };
+function quadBurst(btn){
+  try{
+    const r=btn.getBoundingClientRect();
+    const cx=r.left+r.width/2, cy=r.top+r.height/2;
+    const ring=document.createElement('div');
+    ring.className='quad-ring';
+    ring.style.left=cx+'px'; ring.style.top=cy+'px';
+    document.body.appendChild(ring);
+    setTimeout(()=>{ try{ ring.remove(); }catch(err){} }, 560);
+    const cols=['#f5c542','#7cc0ff','#ffffff','#a9d6ff'];
+    for(let i=0;i<9;i++){
+      const p=document.createElement('div');
+      p.className='quad-spark';
+      const a=(Math.PI*2*i)/9 + Math.random()*0.5;
+      const dist=24+Math.random()*22;
+      p.style.left=cx+'px'; p.style.top=cy+'px';
+      p.style.background=cols[i%cols.length];
+      p.style.color=cols[i%cols.length];
+      p.style.setProperty('--dx', (Math.cos(a)*dist).toFixed(1)+'px');
+      p.style.setProperty('--dy', (Math.sin(a)*dist).toFixed(1)+'px');
+      document.body.appendChild(p);
+      setTimeout(()=>{ try{ p.remove(); }catch(err){} }, 520);
+    }
+  }catch(e){}
+}
 document.querySelectorAll('#quadItems button').forEach(b=>{
   b.onclick=(e)=>{
     e.stopPropagation();
+    quadBurst(b);
     // 保持四方格展开，只重置自动回收计时
     const t=document.getElementById(b.dataset.p+'Btn');
     if(t && typeof t.onclick==='function') t.onclick();
