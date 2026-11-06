@@ -1183,7 +1183,7 @@ cv.addEventListener('mouseup', ()=>{ joy.active=false; joy.dx=joy.dy=0; });
 
 // ---------- 森林地图 ----------
 const FW=100, FH=100;
-let location='town';
+let mapName='town';
 let forestWorld=null, forestRoad=null, forestWater=null, forestMobs=[];
 let townData=null;
 function buildForestWorld(){
@@ -1304,12 +1304,12 @@ function forestSolid(x,y){
   return false;
 }
 function setMap(name){
-  if(name===location) return;
+  if(name===mapName) return;
   if(!townData){
     townData={ world, road:tileRoadCnt, water:tileWaterCnt, buildings:BUILDINGS, props:PROPS,
                W:WCOLS, H:WROWS };
   }
-  location=name;
+  mapName=name;
   if(name==='forest'){
     if(!forestWorld){ const f=buildForestWorld(); forestWorld=f.world; forestRoad=f.road; forestWater=f.water; }
     WCOLS=FW; WROWS=FH;
@@ -1331,7 +1331,7 @@ function setMap(name){
 
 // ---------- 碰撞 ----------
 function solidAt(px,py){
-  if(location==='forest' && forestWorld) return forestSolid(px,py);
+  if(mapName==='forest' && forestWorld) return forestSolid(px,py);
   const tx=Math.floor(px/TILE), ty=Math.floor(py/TILE);
   if(tx<0||ty<0||tx>=WCOLS||ty>=WROWS) return true;
   if(world[ty][tx]!==0) return true;
@@ -2189,7 +2189,7 @@ function render(){
   if(vis(NPC.x-16,NPC.y-24,32,40)) ds.push({bottom:NPC.y, draw:drawNPC});
   if(vis(DUMMY.x-12,DUMMY.y-26,24,30)) ds.push({bottom:DUMMY.y, draw:drawDummy});
   for(const sl of slimes) ds.push({bottom:sl.y, draw:()=>drawSlime(sl)});
-  if(location==='forest'){
+  if(mapName==='forest'){
     for(const m of forestMobs){
       if(m.dead) continue;
       if(!vis(m.x-40, m.y-50, 80, 60)) continue;
@@ -3814,7 +3814,7 @@ document.getElementById('charBtn').onclick=()=>{
 };
 document.getElementById('charClose').onclick=()=>{ document.getElementById('charWrap').classList.add('hidden'); updateHudButtons(); };
 document.getElementById('charBg').onclick=(e)=>{
-  if(performance.now()-charOpenAt<380) return;
+  if(performance.now()-charOpenAt<380 || !panelGuardOk()) return;
   document.getElementById('charWrap').classList.add('hidden'); updateHudButtons();
 };
 function fitCollection(){
@@ -4043,7 +4043,7 @@ document.getElementById('craftBtn').onclick=()=>{
   openCraft();
 };
 document.getElementById('craftClose').onclick=()=>{ document.getElementById('craftWrap').classList.add('hidden'); updateHudButtons(); };
-document.getElementById('craftBg').onclick=()=>{ document.getElementById('craftWrap').classList.add('hidden'); updateHudButtons(); };
+document.getElementById('craftBg').onclick=()=>{ if(!panelGuardOk()) return; document.getElementById('craftWrap').classList.add('hidden'); updateHudButtons(); };
 
 function openCollection(){
   closeAllPanels('colWrap');
@@ -4070,7 +4070,7 @@ document.getElementById('colBtn').onclick=()=>{
   sfxBeep(); vibrate(2); openCollection();
 };
 document.getElementById('colClose').onclick=()=>{ document.getElementById('colWrap').classList.add('hidden'); updateHudButtons(); };
-document.getElementById('colBg').onclick=()=>{ document.getElementById('colWrap').classList.add('hidden'); updateHudButtons(); };
+document.getElementById('colBg').onclick=()=>{ if(!panelGuardOk()) return; document.getElementById('colWrap').classList.add('hidden'); updateHudButtons(); };
 document.querySelectorAll('#colTop button').forEach(b=>{
   b.onclick=()=>{
     colTab=b.dataset.t;
@@ -4453,7 +4453,10 @@ function bindSort(){
 function closeChar(){ document.getElementById('charWrap').classList.add('hidden'); }
 // 面板互斥：打开任何一个都先关掉其它所有面板
 const PANEL_IDS=['bagWrap','equipWrap','colWrap','craftWrap','charWrap'];
+let panelGuardAt=0;
+function panelGuardOk(){ return performance.now()-panelGuardAt > 380; }
 function closeAllPanels(exceptId){
+  panelGuardAt=performance.now();
   for(const id of PANEL_IDS){
     if(id===exceptId) continue;
     const el=document.getElementById(id);
@@ -4488,7 +4491,7 @@ function openBag(){
   requestAnimationFrame(()=>{ updateBagScroll(); requestAnimationFrame(updateBagScroll); });
 }
 document.getElementById('eqClose').onclick=()=>document.getElementById('equipWrap').classList.add('hidden');
-document.getElementById('equipBg').onclick=()=>{ if(performance.now()-equipOpenAt<450) return; document.getElementById('equipWrap').classList.add('hidden'); };
+document.getElementById('equipBg').onclick=()=>{ if(performance.now()-equipOpenAt<450 || !panelGuardOk()) return; document.getElementById('equipWrap').classList.add('hidden'); };
 document.getElementById('bagClose').onclick=()=>document.getElementById('bagWrap').classList.add('hidden');
 function closeBag(){
   try{
@@ -4500,7 +4503,7 @@ function closeBag(){
     const bar=document.getElementById('bagMultiBar');
     if(bar) bar.classList.add('hidden');
   }catch(e){} document.getElementById('bagWrap').classList.add('hidden'); }
-document.getElementById('bagBg').onclick=()=>{ if(performance.now()-bagOpenAt<450) return; closeBag(); };
+document.getElementById('bagBg').onclick=()=>{ if(performance.now()-bagOpenAt<450 || !panelGuardOk()) return; closeBag(); };
 document.getElementById('bagWrap').addEventListener('click', (e)=>{
   if(e.target.id!=='bagWrap' && e.target.id!=='bagBg') return;
   if(performance.now()-bagOpenAt<350) return;
@@ -4705,7 +4708,7 @@ function updateInteract(){
     const dist=Math.hypot(player.x-d.x, player.y-d.y);
     if(dist<22 && facingTarget(d.x,d.y) && dist<bd){ bd=dist; best={k:'drop', d}; }
   }
-  if(location==='forest'){
+  if(mapName==='forest'){
     if(player.x<9*TILE && Math.abs(player.y-52*TILE)<40){ interactTarget={k:'exitForest'}; nearNpc=true; updateHudButtons(); return; }
     interactTarget=null; nearNpc=false; updateHudButtons(); return;
   }
@@ -5157,7 +5160,7 @@ function doAttack(){
   {
     const it2=ITEMS[wid]||{};
     const wkb=it2.kb!=null?it2.kb:1;
-    if(location==='forest'){
+    if(mapName==='forest'){
       for(const fm of forestMobs){
         if(fm.dead) continue;
         const fdx=fm.x-player.x, fdy=fm.y-player.y;
