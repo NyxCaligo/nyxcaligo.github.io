@@ -597,7 +597,9 @@
     <button id="devAll2" class="sp-full sp-alt">全部物品各 +1</button>
     <button id="devClear2" class="sp-full sp-alt">清空背包</button>
     <button id="devResetStory2" class="sp-full sp-alt">重置剧情对话</button>
-    <button id="devSlime2" class="sp-full sp-alt">生成史莱姆</button>
+    <button id="devSlime2" class="sp-full sp-alt">召唤 3 只史莱姆</button>
+    <button id="devGod" class="sp-full sp-alt">无敌模式：关</button>
+    <button id="devClearMobs" class="sp-full sp-alt">清理所有怪物</button>
     <button id="devClose" class="sp-full">关闭</button>
   </div>
 </div>
@@ -1901,7 +1903,7 @@ function render(){
   for(const p of PROPS) if(vis(p.x-40,p.y-40,80,80)) ds.push({bottom:p.y, draw:()=>drawProp(p)});
   if(vis(NPC.x-16,NPC.y-24,32,40)) ds.push({bottom:NPC.y, draw:drawNPC});
   if(vis(DUMMY.x-12,DUMMY.y-26,24,30)) ds.push({bottom:DUMMY.y, draw:drawDummy});
-  if(SLIME.alive) ds.push({bottom:SLIME.y, draw:drawSlime});
+  for(const sl of slimes) ds.push({bottom:sl.y, draw:()=>drawSlime(sl)});
   if(vis(ELDER.x-8,ELDER.y-20,16,30)) ds.push({bottom:ELDER.y, draw:drawElder});
   if(vis(OFFICER.x-8,OFFICER.y-20,16,30)) ds.push({bottom:OFFICER.y, draw:drawOfficer});
   ds.push({bottom:SHOP_DOOR.y+2, draw:drawShopDoorMark});
@@ -3508,7 +3510,14 @@ document.getElementById('devClose').onclick=()=>document.getElementById('devWrap
 document.getElementById('devBg').onclick=()=>document.getElementById('devWrap').classList.add('hidden');
 document.getElementById('devAll2').onclick=()=>{ for(const id in ITEMS) addItem(id,1); renderBag(); saveGame(); toastMsg('已加入全部物品'); };
 document.getElementById('devClear2').onclick=()=>{ bagItems=[]; renderBag(); saveGame(); toastMsg('背包已清空'); };
-document.getElementById('devSlime2').onclick=()=>{ spawnSlime(); toastMsg('已生成史莱姆'); };
+document.getElementById('devSlime2').onclick=()=>{ spawnSlime(3); };
+document.getElementById('devGod').onclick=(e)=>{
+  godMode=!godMode;
+  e.target.textContent='无敌模式：'+(godMode?'开':'关');
+  e.target.classList.toggle('on', godMode);
+  toastMsg(godMode?'无敌模式已开启':'无敌模式已关闭');
+};
+document.getElementById('devClearMobs').onclick=()=>{ slimes=[]; toastMsg('已清理所有怪物'); };
 document.getElementById('devResetStory2').onclick=()=>{
   storyTalked=false; try{ dlgGiven={}; }catch(e){}
   saveGame(); toastMsg('剧情已重置，可再次与艾琳对话');
@@ -4463,14 +4472,18 @@ function doAttack(){
     const dx=DUMMY.x-player.x, dy=DUMMY.y-player.y;
     if(Math.hypot(dx,dy)<36 && (dx*player.face)>=-8) hitDummy();
   }
-  if(SLIME.alive){
-    const sdx=SLIME.x-player.x, sdy=SLIME.y-player.y;
-    const sd=Math.hypot(sdx,sdy);
-    if(sd<36 && (sdx*player.face)>=-8){
+  {
+    let target=null, best=1e9;
+    for(const sl of slimes){
+      const sdx=sl.x-player.x, sdy=sl.y-player.y;
+      const sd=Math.hypot(sdx,sdy);
+      if(sd<36 && (sdx*player.face)>=-8 && sd<best){ best=sd; target=sl; }
+    }
+    if(target){
       const it2=ITEMS[wid]||{};
       const crit2=Math.random()*100<(it2.crit||4);
       const dmg2=Math.max(1, Math.round((it2.dmg||5)*(crit2?(it2.critMult||1.7):1)));
-      hitSlime(dmg2, crit2);
+      hitSlime(target, dmg2, crit2);
     }
   }
 }
@@ -4487,8 +4500,12 @@ addEventListener('keydown', e=>{
 // ---------- 史莱姆战斗 ----------
 const SLIME_ART='data:image/png;base64,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';
 let slimeImg=null;
-const SLIME={alive:false, x:0,y:0, hp:20, maxHp:20, dmg:4, r:10, vx:0, vy:0,
-             iframe:0, atkCd:0, hitFlash:0, atkAnim:0, wob:0, face:1, hurt:0};
+let slimes=[];
+let godMode=false;
+function newSlime(x,y){
+  return {x, y, hp:20, maxHp:20, dmg:4, r:10, vx:0, vy:0,
+          iframe:0, atkCd:1, hitFlash:0, atkAnim:0, wob:Math.random()*6, face:1};
+}
 let playerIframe=0, playerHurt=0, guardTalked=false;
 let dead=false, deathT=0, reviveReady=false;
 const REVIVE_POINT={x:636, y:470};
@@ -4515,41 +4532,42 @@ function doRevive(){
   updateHudButtons();
 }
 let orbs=[], chunks=[], splats=[];
-function spawnSlime(){
-  SLIME.alive=true; SLIME.hp=SLIME.maxHp=20;
-  SLIME.x=OFFICER.x-30; SLIME.y=OFFICER.y+26;
-  SLIME.iframe=0; SLIME.atkCd=1; SLIME.hitFlash=0; SLIME.wob=Math.random()*6;
-  toastMsg('一只史莱姆出现了！');
-  sfxCrit();
+function spawnSlime(n){
+  const cnt=n||1;
+  for(let i=0;i<cnt;i++){
+    const sx=OFFICER.x-30+(Math.random()*26-13), sy=OFFICER.y+26+(Math.random()*20-10);
+    slimes.push(newSlime(splayerGuardX(sx), splayerGuardY(sy)));
+  }
+  if(slimes.length) { toastMsg(cnt>1?('出现了 '+cnt+' 只史莱姆！'):'一只史莱姆出现了！'); sfxCrit(); }
 }
-function hitSlime(dmg, crit){
-  if(!SLIME.alive) return;
-  if(SLIME.iframe>0) return;
-  SLIME.iframe=0.4; SLIME.hitFlash=0.2;
-  SLIME.hp-=dmg;
-  addDmgNum(SLIME.x, SLIME.y-18, dmg, crit);
-  spawnHitSpark(SLIME.x, SLIME.y-8);
-  // 击退
-  const dx=SLIME.x-player.x, dy=SLIME.y-player.y, d=Math.hypot(dx,dy)||1;
-  SLIME.vx=dx/d*90; SLIME.vy=dy/d*90;
-  if(SLIME.hp<=0) killSlime();
+function splayerGuardX(x){ return Math.max(20, Math.min(WORLD_W-20, x)); }
+function splayerGuardY(y){ return Math.max(20, Math.min(WORLD_H-20, y)); }
+function hitSlime(s, dmg, crit){
+  if(!s || s.iframe>0) return;
+  s.iframe=0.4; s.hitFlash=0.2;
+  s.hp-=dmg;
+  addDmgNum(s.x, s.y-18, dmg, crit);
+  spawnHitSpark(s.x, s.y-8);
+  const dx=s.x-player.x, dy=s.y-player.y, d=Math.hypot(dx,dy)||1;
+  s.vx=dx/d*90; s.vy=dy/d*90;
+  if(s.hp<=0) killSlime(s);
 }
-function killSlime(){
-  SLIME.alive=false;
+function killSlime(s){
+  slimes=slimes.filter(x=>x!==s);
   // 经验球 + 铜币（爆发）
-  for(let i=0;i<2;i++) orbs.push({kind:'xp', x:SLIME.x, y:SLIME.y-6, vx:(Math.random()*2-1)*70, vy:-Math.random()*70-30, life:14, val:4});
-  for(let i=0;i<3;i++) orbs.push({kind:'coin', x:SLIME.x, y:SLIME.y-6, vx:(Math.random()*2-1)*80, vy:-Math.random()*80-30, life:14, val:1});
+  for(let i=0;i<2;i++) orbs.push({kind:'xp', x:s.x, y:s.y-6, vx:(Math.random()*2-1)*70, vy:-Math.random()*70-30, life:14, val:4});
+  for(let i=0;i<3;i++) orbs.push({kind:'coin', x:s.x, y:s.y-6, vx:(Math.random()*2-1)*80, vy:-Math.random()*80-30, life:14, val:1});
   // 尸块
   for(let i=0;i<5;i++){
     const a=Math.random()*Math.PI*2;
-    chunks.push({x:SLIME.x, y:SLIME.y-8, vx:Math.cos(a)*70, vy:-Math.random()*80-20,
+    chunks.push({x:s.x, y:s.y-8, vx:Math.cos(a)*70, vy:-Math.random()*80-20,
                  life:3+Math.random()*2, size:2+Math.floor(Math.random()*2),
                  col:['#7ed957','#5cc23a','#9df07a'][i%3]});
   }
   // 粘液飞溅（落地消失）
   for(let i=0;i<8;i++){
     const a=Math.random()*Math.PI*2;
-    splats.push({x:SLIME.x, y:SLIME.y-8, vx:Math.cos(a)*60, vy:-Math.random()*60-20, life:1.2, dead:false});
+    splats.push({x:s.x, y:s.y-8, vx:Math.cos(a)*60, vy:-Math.random()*60-20, life:1.2, dead:false});
   }
   sfxHit();
 }
@@ -4779,35 +4797,33 @@ function updateSlime(dt){
     }
     return;
   }
-  if(!SLIME.alive) return;
-  if(SLIME.iframe>0) SLIME.iframe=Math.max(0,SLIME.iframe-dt);
-  if(SLIME.hitFlash>0) SLIME.hitFlash=Math.max(0,SLIME.hitFlash-dt);
-  if(SLIME.atkAnim>0) SLIME.atkAnim=Math.max(0,SLIME.atkAnim-dt);
-  SLIME.wob+=dt*7;
-  const dx=player.x-SLIME.x, dy=player.y-SLIME.y;
-  const dist=Math.hypot(dx,dy)||1;
-  SLIME.face = dx>=0?1:-1;
-  // 击退惯性
-  SLIME.x+=SLIME.vx*dt; SLIME.y+=SLIME.vy*dt;
-  SLIME.vx*=Math.pow(0.001,dt); SLIME.vy*=Math.pow(0.001,dt);
-  // 追玩家（锁定）
-  const speed=52;
-  if(dist>14){
-    let nx=SLIME.x+dx/dist*speed*dt, ny=SLIME.y+dy/dist*speed*dt;
-    if(!solidAt(nx,SLIME.y)) SLIME.x=nx;
-    if(!solidAt(SLIME.x,ny)) SLIME.y=ny;
-  }
-  // 攻击
-  if(SLIME.atkCd>0) SLIME.atkCd=Math.max(0,SLIME.atkCd-dt);
-  if(dist<16 && SLIME.atkCd<=0){
-    SLIME.atkCd=1.2; SLIME.atkAnim=0.22;
-    if(playerIframe<=0 && player.hp>0){
-      player.hp=Math.max(0,player.hp-SLIME.dmg);
-      if(player.hp<=0){ killPlayer(); }
-      playerIframe=0.4; playerHurt=0.32;
-      addDmgNum(player.x, player.y-20, SLIME.dmg, false);
-      vibrate(3); sfxHurt();
-      saveGame();
+  for(const s of slimes){
+    if(s.iframe>0) s.iframe=Math.max(0,s.iframe-dt);
+    if(s.hitFlash>0) s.hitFlash=Math.max(0,s.hitFlash-dt);
+    if(s.atkAnim>0) s.atkAnim=Math.max(0,s.atkAnim-dt);
+    s.wob+=dt*7;
+    const dx=player.x-s.x, dy=player.y-s.y;
+    const dist=Math.hypot(dx,dy)||1;
+    s.face = dx>=0?1:-1;
+    s.x+=s.vx*dt; s.y+=s.vy*dt;
+    s.vx*=Math.pow(0.001,dt); s.vy*=Math.pow(0.001,dt);
+    const speed=52;
+    if(dist>14){
+      let nx=s.x+dx/dist*speed*dt, ny=s.y+dy/dist*speed*dt;
+      if(!solidAt(nx,s.y)) s.x=nx;
+      if(!solidAt(s.x,ny)) s.y=ny;
+    }
+    if(s.atkCd>0) s.atkCd=Math.max(0,s.atkCd-dt);
+    if(dist<16 && s.atkCd<=0){
+      s.atkCd=1.2; s.atkAnim=0.22;
+      if(playerIframe<=0 && player.hp>0 && !godMode){
+        player.hp=Math.max(0,player.hp-s.dmg);
+        playerIframe=0.4; playerHurt=0.32;
+        addDmgNum(player.x, player.y-20, s.dmg, false);
+        vibrate(3); sfxHurt();
+        if(player.hp<=0) killPlayer();
+        else saveGame();
+      }
     }
   }
 }
@@ -5061,8 +5077,7 @@ function hitDummy(){
   vibrate(crit?2:1);
   if(crit) try{ sfxCrit(); }catch(e){}
 }
-function drawSlime(){
-  if(!SLIME.alive) return;
+function drawSlime(SLIME){
   const sq=Math.sin(SLIME.wob)*0.10 + (SLIME.atkAnim>0?0.16:0);
   const w=Math.round(13*(1+sq)), h=Math.round(12*(1-sq*0.85));
   const cx=SLIME.x-camX, by=SLIME.y-camY;
@@ -5083,9 +5098,6 @@ function drawSlime(){
   px(bx-1, by-1, 3, 2, L);
   px(bx+w-2, by-1, 3, 2, L);
   px(bx+Math.round(w*0.4), by, 2, 1, L);
-  // 描边
-  px(bx-1, byy+1, 1, h-2, L);
-  px(bx+w, byy+1, 1, h-2, L);
   // 高光
   px(bx+2, byy+2, 2, 2, HL);
   px(bx+2, byy+4, 1, 1, HL);
