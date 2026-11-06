@@ -1183,7 +1183,7 @@ cv.addEventListener('mousemove', e=>{ if(!joy.active)return; const [vx,vy]=toV(e
 cv.addEventListener('mouseup', ()=>{ joy.active=false; joy.dx=joy.dy=0; });
 
 // ---------- 森林地图 ----------
-const FW=100, FH=100;
+const FW=128, FH=128;
 let mapName='town';
 let forestWorld=null, forestRoad=null, forestWater=null, forestMobs=[];
 let townData=null;
@@ -1195,7 +1195,7 @@ function buildForestWorld(){
   } w.push(row); }
   const road=new Uint8Array(FW*FH), water=new Uint8Array(FW*FH);
   // 河流（竖向蜿蜒）
-  const riverX=(y)=> 62 + Math.sin(y*0.09)*7;
+  const riverX=(y)=> 82 + Math.sin(y*0.08)*8;
   for(let y=2;y<FH-2;y++){
     const cx=riverX(y);
     for(let x=Math.floor(cx-3);x<=Math.ceil(cx+3);x++){
@@ -1204,18 +1204,18 @@ function buildForestWorld(){
     }
   }
   // 木桥
-  const bridgeY=52;
+  const bridgeY=76;
   const bx0=Math.floor(riverX(bridgeY)-4), bx1=Math.ceil(riverX(bridgeY)+4);
   for(let x=bx0;x<=bx1;x++) for(let y=bridgeY-1;y<=bridgeY+1;y++) water[y*FW+x]=0;
   // 湖泊（西侧）
-  const lakeX=26, lakeY=74, lakeR=12;
+  const lakeX=30, lakeY=104, lakeR=14;
   for(let y=lakeY-lakeR;y<=lakeY+lakeR;y++) for(let x=lakeX-lakeR;x<=lakeX+lakeR;x++){
     if(x<3||y<3||x>=FW-3||y>=FH-3) continue;
     const d=Math.hypot((x-lakeX)*0.92,(y-lakeY)*1.1);
     if(d<lakeR + (hash(x*5+11,y*3+7)-0.5)*2.2) water[y*FW+x]=1;
   }
   // 土路
-  const path=[[5,52],[20,52],[38,50],[Math.round(riverX(52)),52],[70,54],[88,52],[95,52]];
+  const path=[[5,76],[26,76],[48,74],[Math.round(riverX(76)),76],[92,78],[112,76],[122,76]];
   for(let i=0;i<path.length-1;i++){
     const [x1,y1]=path[i], [x2,y2]=path[i+1];
     const steps=Math.max(Math.abs(x2-x1),Math.abs(y2-y1))*2;
@@ -1227,25 +1227,6 @@ function buildForestWorld(){
         if(Math.hypot(dx,dy)<=1.6) road[ny*FW+nx]=1;
       }
     }
-  }
-  // 散落的石块与灌木（单个/至多 2 格，不会成大片）
-  let placed=0, guard=0;
-  while(placed<120 && guard<6000){
-    guard++;
-    const x=4+Math.floor(Math.random()*(FW-8));
-    const y=4+Math.floor(Math.random()*(FH-8));
-    const i=y*FW+x;
-    if(road[i]||water[i]||w[y][x]!==0) continue;
-    if(y>FH-8) continue;
-    // 不挡住入口与桥
-    if(Math.abs(y-52)<3 && x<12) continue;
-    if(Math.abs(y-bridgeY)<3) continue;
-    // 邻接至少一格空地，避免成墙
-    let open=0;
-    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]) if(!water[(y+dy)*FW+(x+dx)]) open++;
-    if(open<3) continue;
-    w[y][x] = (hash(x*3+1,y*5+2)>0.55) ? 4 : 5;  // 4石 5灌木
-    placed++;
   }
   return {world:w, road, water};
 }
@@ -1969,7 +1950,7 @@ function buildGround(){
         else drawGroundTile(sx,sy,tx,ty);
       } else drawBoundaryBase(sx,sy,tx,ty);
     }
-    drawBridge();
+    if(mapName==='town') drawBridge();
     octx = saved; camX=sx0; camY=sy0;
     baking = false;
     groundOK = true;
@@ -2034,13 +2015,11 @@ function buildChunk(cx,cy){
         const sx=tx*TILE-x0, sy=ty*TILE-y0, t=world[ty][tx];
         if(mapName==='forest'){
           if(t===0){
-            if(tileWaterCnt[ty*WCOLS+tx]>0) drawWaterTile(sx,sy,tx,ty);
+            if(tileWaterCnt[ty*WCOLS+tx]>0) drawForestWater(sx,sy,tx,ty);
             else if(tileRoadCnt[ty*WCOLS+tx]>2) drawForestRoad(sx,sy,tx,ty);
             else drawForestGrass(sx,sy,tx,ty);
           } else {
-            if(t===4) drawForestStone(sx,sy,tx,ty);
-            else if(t===5) drawForestBush(sx,sy,tx,ty);
-            else drawForestWall(sx,sy,tx,ty);
+            drawForestWall(sx,sy,tx,ty);
           }
         } else {
           if(t===0){ if(tileWaterCnt[ty*WCOLS+tx]>0) drawWaterTile(sx,sy,tx,ty); else drawGroundTile(sx,sy,tx,ty); }
@@ -2056,19 +2035,15 @@ function buildChunk(cx,cy){
 }
 function drawForestGrass(sx,sy,tx,ty){
   const h=hash(tx*2+1,ty*3+7);
-  octx.fillStyle = h<0.25 ? '#4f8f3a' : (h<0.7 ? '#569a40' : '#5da648');
-  octx.fillRect(sx,sy,TILE,TILE);
-  octx.fillStyle='rgba(255,255,255,.05)'; octx.fillRect(sx,sy,TILE,1);
-  const h2=hash(tx*7+3,ty*13+5);
-  if(h2<0.35){
-    octx.fillStyle='#3f7a2e';
-    const gx=sx+2+Math.floor(h2*10), gy=sy+4+Math.floor(hash(tx,ty+9)*8);
-    octx.fillRect(gx,gy,1,3); octx.fillRect(gx+2,gy+1,1,2);
-  }
-  if(h2>0.86){
-    octx.fillStyle='#6fbf58';
-    octx.fillRect(sx+4+Math.floor(h2*8), sy+5, 2, 1);
-  }
+  const base = h<0.22 ? '#4f8f3a' : (h<0.62 ? '#569a40' : (h<0.86 ? '#5da648' : '#63ad4d'));
+  octx.fillStyle=base; octx.fillRect(sx,sy,TILE,TILE);
+  // 细碎纹理
+  const h1=hash(tx*7+3,ty*13+5);
+  if(h1<0.30){ octx.fillStyle='#3f7a2e'; octx.fillRect(sx+2+Math.floor(h1*20), sy+4+Math.floor(hash(tx,ty+9)*8),1,3); }
+  if(h1>0.80){ octx.fillStyle='#79c563'; octx.fillRect(sx+4+Math.floor(h1*8), sy+6, 2,1); }
+  if(h1>0.55 && h1<0.62){ octx.fillStyle='#f2e6a8'; octx.fillRect(sx+5+Math.floor(h1*6), sy+9, 1,1); }
+  if(h1<0.12){ octx.fillStyle='#4a6b33'; octx.fillRect(sx+3, sy+11, 3,1); }
+  octx.fillStyle='rgba(255,255,255,.045)'; octx.fillRect(sx,sy,TILE,1);
 }
 function drawForestRoad(sx,sy,tx,ty){
   const h=hash(tx*5+2,ty*7+3);
@@ -2097,12 +2072,39 @@ function drawForestBush(sx,sy,tx,ty){
   octx.fillStyle='#57a066'; octx.fillRect(sx+9,sy+5,2,2);
 }
 function drawForestWall(sx,sy,tx,ty){
-  const h=hash(tx*3+5,ty*9+1);
-  octx.fillStyle = h<0.5 ? '#28492b' : '#2f5733';
+  // 棕褐色土块墙：四边不规则 + 内部随机纹路
+  const h=hash(tx*3+5,ty*9+1), h2=hash(tx*7+2,ty*11+6);
+  octx.fillStyle = h<0.5 ? '#6b4a2e' : '#755134';
   octx.fillRect(sx,sy,TILE,TILE);
-  octx.fillStyle='#3a6b3f'; octx.fillRect(sx+2,sy+2,5,4);
-  octx.fillStyle='#1d3a20'; octx.fillRect(sx+9,sy+8,5,5);
-  octx.fillStyle='#4a8250'; octx.fillRect(sx+3,sy+10,3,2);
+  // 内部随机土纹
+  for(let i=0;i<5;i++){
+    const hh=hash(tx*13+i, ty*17+i*3);
+    octx.fillStyle = hh<0.5 ? '#5a3d24' : '#835c3b';
+    octx.fillRect(sx+1+Math.floor(hh*12), sy+1+Math.floor(hash(tx+i,ty)*12), 2+Math.floor(hh*2), 1);
+  }
+  // 不规则边缘（亮/暗）
+  octx.fillStyle='#8a6440';
+  for(let i=0;i<TILE;i+=2){
+    if(hash(tx*5+i,ty*3)>0.35) octx.fillRect(sx+i, sy, 2, 1);
+    if(hash(tx*9+i,ty*7)>0.5) octx.fillRect(sx, sy+i, 1, 2);
+  }
+  octx.fillStyle='#4a3220';
+  for(let i=0;i<TILE;i+=2){
+    if(hash(tx*11+i,ty*13)>0.4) octx.fillRect(sx+i, sy+TILE-1, 2, 1);
+    if(hash(tx*17+i,ty*19)>0.55) octx.fillRect(sx+TILE-1, sy+i, 1, 2);
+  }
+}
+function drawForestWater(sx,sy,tx,ty){
+  const cnt=tileWaterCnt[ty*WCOLS+tx];
+  if(!cnt) { drawForestGrass(sx,sy,tx,ty); return; }
+  octx.fillStyle='#2f6fb0'; octx.fillRect(sx,sy,TILE,TILE);
+  octx.fillStyle='#3f84c9'; octx.fillRect(sx,sy,TILE,2);
+  const h=hash(tx*3+1,ty*5+2);
+  octx.fillStyle='#5aa2e0';
+  octx.fillRect(sx+2+Math.floor(h*6), sy+5, 5, 1);
+  octx.fillRect(sx+4+Math.floor(h*4), sy+11, 4, 1);
+  octx.fillStyle='#245a94';
+  octx.fillRect(sx, sy+TILE-2, TILE, 2);
 }
 function renderShopRoom(){
   octx.fillStyle='#141018'; octx.fillRect(0,0,VW,VH);
@@ -4752,7 +4754,7 @@ function updateInteract(){
     if(dist<22 && facingTarget(d.x,d.y) && dist<bd){ bd=dist; best={k:'drop', d}; }
   }
   if(mapName==='forest'){
-    if(player.x<9*TILE && Math.abs(player.y-52*TILE)<40){ interactTarget={k:'exitForest'}; nearNpc=true; updateHudButtons(); return; }
+    if(player.x<9*TILE && Math.abs(player.y-76*TILE)<40){ interactTarget={k:'exitForest'}; nearNpc=true; updateHudButtons(); return; }
     interactTarget=null; nearNpc=false; updateHudButtons(); return;
   }
   if(!best){
@@ -4844,23 +4846,48 @@ document.getElementById('interactBtn').onclick=()=>{
   }
 };
 let miniCheckTick=0;
+let miniBig=false;
 function drawMini(){
   const cv=document.getElementById('miniMap');
   if(!cv) return;
   const on = showMini && (state==='city');
   cv.classList.toggle('hidden', !on);
   if(!on) return;
+  const cssSize = miniBig ? 168 : 88;
+  try{ cv.style.width=cssSize+'px'; cv.style.height=cssSize+'px'; }catch(e){}
   miniCheckTick++;
   if(miniCheckTick%300===0 && !miniAlive()){ try{ buildMini(); }catch(e){} }
   const g=cv.getContext('2d');
   if(!g) return;
   g.imageSmoothingEnabled=false;
   g.clearRect(0,0,160,160);
-  g.drawImage(miniCanvas, 0,0,WCOLS,WROWS, 0,0,160,160);
-  const sx=Math.round((player.x/WORLD_W)*160), sy=Math.round((player.y/WORLD_H)*160);
-  g.fillStyle='rgba(245,197,66,.35)'; g.fillRect(sx-7,sy-7,15,15);
-  g.fillStyle='#f5c542'; g.fillRect(sx-3,sy-3,7,7);
+  g.fillStyle='#0b0f1a'; g.fillRect(0,0,160,160);
+  const px0=player.x/TILE, py0=player.y/TILE;
+  if(miniBig){
+    const k=160/Math.max(WCOLS,WROWS);
+    const w=WCOLS*k, h=WROWS*k;
+    const ox=(160-w)/2, oy=(160-h)/2;
+    g.drawImage(miniCanvas, 0,0,WCOLS,WROWS, ox,oy,w,h);
+    g.fillStyle='rgba(245,197,66,.35)'; g.fillRect(ox+px0*k-6, oy+py0*k-6, 13,13);
+    g.fillStyle='#f5c542'; g.fillRect(ox+px0*k-2, oy+py0*k-2, 5,5);
+  } else {
+    const span=Math.max(24, Math.min(WCOLS, WROWS, 40));
+    let sx0=Math.round(px0-span/2), sy0=Math.round(py0-span/2);
+    sx0=Math.max(0, Math.min(Math.max(0,WCOLS-span), sx0));
+    sy0=Math.max(0, Math.min(Math.max(0,WROWS-span), sy0));
+    g.drawImage(miniCanvas, sx0, sy0, span, span, 0,0,160,160);
+    const cx=(px0-sx0)/span*160, cy=(py0-sy0)/span*160;
+    g.fillStyle='rgba(245,197,66,.35)'; g.fillRect(cx-7,cy-7,15,15);
+    g.fillStyle='#f5c542'; g.fillRect(cx-3,cy-3,7,7);
+  }
+  // 边框
+  g.strokeStyle = miniBig ? '#7cc0ff' : '#2f5a8a';
+  g.lineWidth = miniBig ? 4 : 3;
+  g.strokeRect(0,0,160,160);
 }
+try{
+  document.getElementById('miniMap').onclick=()=>{ miniBig=!miniBig; sfxBeep(); vibrate(2); };
+}catch(e){}
 
 // ---------- 标题界面导入存档 ----------
 document.getElementById('titleLoadBtn').onclick=()=>{ document.getElementById('titleLoad').classList.remove('hidden'); sfxBeep(); };
@@ -5984,7 +6011,7 @@ function centerRoomCam(){
 }
 function enterForest(){
   setMap('forest');
-  player.x=7*TILE; player.y=52*TILE; player.face=1;
+  player.x=7*TILE; player.y=76*TILE; player.face=1;
   camXs=player.x-VW/2; camYs=player.y-VH/2;
   toastMsg('进入了森林');
   sfxEquip(); saveGame();
