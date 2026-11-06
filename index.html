@@ -540,10 +540,14 @@
       <button id="shopTabBuy" class="sp-full" style="flex:1">购买</button>
       <button id="shopTabSell" class="sp-full sp-alt" style="flex:1">出售</button>
     </div>
-    <div id="shopBody" style="width:100%;font-size:12px;color:#8fb3d9;text-align:center;padding:18px 0">
-      商品整理中…
-      <div style="margin-top:8px;font-size:11px;color:#5b7089">老店主还在整理货架</div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:#8fb3d9;width:100%;margin-bottom:6px">
+      <span>金币：0</span><span>货架整理中</span>
     </div>
+    <div id="shopBody" style="width:100%">
+      <div id="shopGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px"></div>
+      <div style="text-align:center;font-size:11px;color:#5b7089;padding:10px 0">商品整理中…老店主还在上货</div>
+    </div>
+    <button id="shopLeave" class="sp-full sp-alt" style="margin-top:6px">离开柜台</button>
   </div>
 </div>
 <div id="statsWrap" class="modal hidden" style="z-index:19; align-items:flex-start; padding-top:8vh;">
@@ -3494,6 +3498,20 @@ function renderStats(){
 }
 try{
   document.getElementById('shopTitle').textContent='商店';
+  {
+    const g=document.getElementById('shopGrid');
+    for(let i=0;i<8;i++){
+      const d=document.createElement('div');
+      d.className='eq-slot';
+      d.style.cssText='aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;color:#4a6180;font-size:16px';
+      d.textContent='?';
+      g.appendChild(d);
+    }
+    document.getElementById('shopLeave').onclick=()=>{
+      document.getElementById('shopWrap').classList.add('hidden');
+      exitShop(); sfxBeep();
+    };
+  }
   const sb=document.getElementById('shopTabBuy'), ss=document.getElementById('shopTabSell');
   sb.onclick=()=>{ sb.classList.remove('sp-alt'); ss.classList.add('sp-alt'); sfxBeep(); };
   ss.onclick=()=>{ ss.classList.remove('sp-alt'); sb.classList.add('sp-alt'); sfxBeep(); };
@@ -3927,12 +3945,15 @@ function drawAmbient(){
     if(interactTarget.npc==='elder'){ tx2=ELDER.x; ty2=ELDER.y; }
     else if(interactTarget.npc==='officer'){ tx2=OFFICER.x; ty2=OFFICER.y; }
     const bx=Math.round(tx2-camX), by=Math.round(ty2-camY);
-    octx.strokeStyle='#ffffff'; octx.lineWidth=1;
+    octx.strokeStyle='rgba(255,255,255,.9)'; octx.lineWidth=1;
     octx.strokeRect(bx-8, by-14, 17, 25);
-    px(bx-4, by-30, 9, 12, '#0b0f1a');
-    px(bx-3, by-29, 7, 10, '#f5c542');
-    px(bx, by-27, 1, 5, '#0b0f1a');
-    px(bx, by-21, 1, 1, '#0b0f1a');
+    // 只有剧情 NPC 才冒感叹号
+    if(interactTarget.npc==='erin'){
+      px(bx-4, by-30, 9, 12, '#0b0f1a');
+      px(bx-3, by-29, 7, 10, '#f5c542');
+      px(bx, by-27, 1, 5, '#0b0f1a');
+      px(bx, by-21, 1, 1, '#0b0f1a');
+    }
   }
   for(let i=0;i<14;i++){
     const fx=hash(i,7)*WORLD_W + Math.sin(gtime*0.15+i)*30;
@@ -4394,134 +4415,91 @@ function drawShopDoorMark(){
   px(x+9, y-17, 6, 1, '#5a3a1f');
 }
 function drawGate(){
-  const gx=988, gy=470;
+  const gx=1004, gy=470;                 // 贴着右边界墙
   const x=Math.round((gx-camX)*RES)/RES, y=Math.round((gy-camY)*RES)/RES;
-  if(x<-90||x>VW+90||y<-140||y>VH+80) return;
-  // 地面阴影
-  px(x-40, y-2, 80, 5, 'rgba(0,0,0,.22)');
-  // 左右塔楼
-  for(const sx of [-40, 22]){
-    px(x+sx, y-86, 18, 86, '#7b8390');
-    px(x+sx, y-86, 18, 3, '#98a1ae');
-    px(x+sx, y-86, 3, 86, '#8f98a5');
-    px(x+sx+15, y-86, 3, 86, '#5f6672');
-    // 塔顶雉堞
-    for(let i=0;i<3;i++) px(x+sx+i*6, y-94, 5, 8, '#8f98a5');
-    px(x+sx, y-94, 18, 2, '#a9b2bf');
-    // 窗
-    px(x+sx+6, y-62, 6, 10, '#20262e');
-    px(x+sx+7, y-60, 4, 6, '#39424e');
-    // 砖缝
-    for(let i=1;i<7;i++) px(x+sx+2, y-86+i*11, 14, 1, 'rgba(0,0,0,.16)');
+  if(x<-110||x>VW+110||y<-160||y>VH+90) return;
+  const STONE='#8a919c', STONE_L='#a9b0bb', STONE_D='#666d78', STONE_DD='#545b66';
+  const bx=(a,b,w,h,c)=>{ octx.fillStyle=c; octx.fillRect(Math.round(x+a), Math.round(y+b), w, h); };
+  // 阴影
+  bx(-46,-1,92,5,'rgba(0,0,0,.22)');
+  // 与边界墙衔接的墙体（左右各一段，同一石材）
+  for(const [ox,w] of [[-46,20],[26,20]]){
+    bx(ox,-70,w,70,STONE);
+    bx(ox,-70,w,3,STONE_L);
+    for(let i=0;i<8;i++) bx(ox,-68+i*9,w,1,'rgba(0,0,0,.14)');
+    // 顶部雉堞，与墙头一致
+    for(let i=0;i<Math.floor(w/7);i++) bx(ox+i*7,-78,5,9,STONE_L);
   }
-  // 中央拱门墙体
-  px(x-22, y-78, 44, 78, '#6f7783');
-  px(x-22, y-78, 44, 3, '#8b94a1');
-  for(let i=1;i<7;i++) px(x-20, y-76+i*11, 40, 1, 'rgba(0,0,0,.14)');
-  // 拱形门洞
-  for(let i=0;i<9;i++){
-    const w=30-i*2.2;
-    px(x-w/2, y-70+i*8, w, 8, '#1b2028');
+  // 两根门柱
+  for(const ox of [-26,-16]){
+    bx(ox,-96,10,96,STONE);
+    bx(ox,-96,10,3,STONE_L);
+    bx(ox,-96,2,96,STONE_L);
+    bx(ox+8,-96,2,96,STONE_D);
+    for(let i=1;i<9;i++) bx(ox,-96+i*10,10,1,'rgba(0,0,0,.18)');
+    for(let i=0;i<2;i++) bx(ox+i*5,-104,4,8,STONE_L);
   }
-  px(x-15, y-70, 30, 4, '#242b34');
-  // 木闸门 + 铁条
-  px(x-14, y-52, 28, 52, '#5a3a22');
-  for(let i=0;i<5;i++) px(x-14+i*6, y-52, 2, 52, '#452b18');
-  for(let i=0;i<3;i++) px(x-14, y-44+i*16, 28, 3, '#39424e');
-  px(x-14, y-52, 28, 2, '#6b4a2e');
-  px(x-2, y-30, 4, 4, '#c9a227');
-  // 门楣横梁 + 徽记
-  px(x-26, y-84, 52, 7, '#8f98a5');
-  px(x-26, y-84, 52, 2, '#a9b2bf');
-  px(x-26, y-84, 2, 7, '#6f7783'); px(x+24, y-84, 2, 7, '#6f7783');
-  px(x-5, y-83, 10, 5, '#d4b24a');
-  px(x-3, y-82, 6, 3, '#8a6a1f');
-  // 旗帜
-  for(const sx of [-31, 23]){
-    px(x+sx, y-76, 1, 22, '#4a3020');
-    px(x+sx+1, y-75, 8, 6, '#8f2b2b');
-    px(x+sx+1, y-69, 8, 2, '#6b1f1f');
-    px(x+sx+4, y-74, 2, 3, '#e8c07a');
+  // 拱门（半圆）
+  for(let i=0;i<12;i++){
+    const ang=Math.PI*(i/11);
+    const ax=-6-Math.cos(ang)*20;
+    const ay=-70-Math.sin(ang)*20;
+    octx.fillStyle=STONE;
+    octx.fillRect(Math.round(x+ax), Math.round(y+ay), 7, 7);
+    octx.fillStyle=STONE_L;
+    octx.fillRect(Math.round(x+ax), Math.round(y+ay), 7, 2);
+  }
+  // 门洞（越往里越暗）
+  bx(-20,-72,40,72,'#1b2028');
+  bx(-16,-70,32,70,'#141920');
+  // 地面延伸出去的土路
+  bx(-18,-2,36,4,'#c9a96b');
+  bx(-16,0,32,3,'#b39358');
+  // 内部地面（石砖）
+  for(let i=0;i<6;i++) for(let j=0;j<3;j++){
+    bx(-18+i*6,-8-j*6,5,5,((i+j)%2)?'#3a4148':'#333a41');
+  }
+  // 升起的闸门（在门洞上方）
+  for(let i=0;i<7;i++) bx(-18+i*5,-66,2,16,'#39424e');
+  bx(-18,-66,34,2,'#4b545f');
+  bx(-18,-50,34,2,'#4b545f');
+  // 打开的两扇木门（贴内侧）
+  bx(-20,-64,7,64,'#5a3a22'); bx(-20,-64,7,2,'#6b4a2e');
+  bx(13,-64,7,64,'#5a3a22');  bx(13,-64,7,2,'#6b4a2e');
+  for(let i=0;i<4;i++){ bx(-19,-60+i*14,5,2,'#452b18'); bx(14,-60+i*14,5,2,'#452b18'); }
+  // 门楣
+  bx(-30,-102,60,7,STONE_L);
+  bx(-30,-96,60,3,STONE_D);
+  // 徽记
+  bx(-7,-101,14,5,'#d4b24a'); bx(-4,-100,8,3,'#8a6a1f');
+  // 旗帜（两侧门柱外挂）
+  for(const ox of [-33,25]){
+    bx(ox,-92,1,26,'#4a3020');
+    bx(ox+1,-91,9,7,'#8f2b2b');
+    bx(ox+1,-84,9,3,'#6b1f1f');
+    bx(ox+4,-90,2,4,'#e8c07a');
+    bx(ox+4,-85,2,2,'#e8c07a');
   }
   // 火把
-  for(const sx of [-26, 26]){
-    const fl=0.6+0.4*Math.abs(Math.sin(gtime*4+sx));
-    px(x+sx, y-40, 2, 8, '#3a2a1e');
-    px(x+sx-1, y-44, 4, 4, 'rgba(255,170,60,'+fl.toFixed(2)+')');
-    px(x+sx, y-43, 2, 2, '#ffe9a8');
+  for(const ox of [-22,18]){
+    const fl=0.55+0.45*Math.abs(Math.sin(gtime*4+ox));
+    bx(ox,-46,2,9,'#3a2a1e');
+    octx.fillStyle='rgba(255,170,60,'+fl.toFixed(2)+')';
+    octx.fillRect(Math.round(x+ox-2), Math.round(y-52), 6, 6);
+    bx(ox-1,-50,4,3,'#ffe9a8');
   }
+  // 路牌（告诉玩家这是出口）
+  bx(-52,-30,2,30,'#6b4a2e');
+  bx(-58,-40,14,11,'#8a6440');
+  bx(-57,-39,12,9,'#c9a96b');
+  bx(-55,-37,8,1,'#5a3a1f');
+  bx(-55,-35,6,1,'#5a3a1f');
+  // 门洞微光
+  octx.globalAlpha=0.10;
+  octx.fillStyle='#ffe9a8';
+  octx.fillRect(Math.round(x-14), Math.round(y-60), 28, 52);
+  octx.globalAlpha=1;
 }
-
-// ---------- 商店内部 ----------
-function roomSolid(x,y){
-  if(x<18||y<22||x>ROOM.w-18||y>ROOM.h-14) return true;
-  // 柜台
-  if(y>30 && y<52 && x>22 && x<ROOM.w-22) return true;
-  return false;
-}
-function centerRoomCam(){
-  camX = -Math.round((VW-ROOM.w)/2);
-  camY = -Math.round((VH-ROOM.h)/2);
-  camXs=camX; camYs=camY;
-}
-function enterShop(){
-  if(inShop) return;
-  townPos={x:player.x, y:player.y};
-  inShop=true;
-  player.x=ROOM.w/2; player.y=ROOM.h-24; player.face=1;
-  attacking=0; atkCd=0;
-  try{ closeBag(); document.getElementById('craftWrap').classList.add('hidden');
-       document.getElementById('colWrap').classList.add('hidden'); closeChar(); }catch(e){}
-  centerRoomCam();
-  sfxEquip(); toastMsg('进入商店');
-}
-function exitShop(){
-  if(!inShop) return;
-  inShop=false;
-  if(townPos){ player.x=townPos.x; player.y=townPos.y+12; }
-  sfxEquip();
-}
-function updateShop(dt){
-  // 自愈：保证玩家一定在房间内，避免“进去后看不到人”
-  if(!(player.x>18 && player.x<ROOM.w-18)) player.x=ROOM.w/2;
-  if(!(player.y>22 && player.y<ROOM.h-14)) player.y=ROOM.h-24;
-  let mvx=0, mvy=0;
-  if(!talking){
-    if(joy.active && Math.hypot(joy.dx,joy.dy)>2){ mvx=joy.dx; mvy=joy.dy; }
-    else {
-      if(keys['a']||keys['arrowleft']) mvx-=1;
-      if(keys['d']||keys['arrowright']) mvx+=1;
-      if(keys['w']||keys['arrowup']) mvy-=1;
-      if(keys['s']||keys['arrowdown']) mvy+=1;
-    }
-  }
-  const mag=Math.hypot(mvx,mvy);
-  if(mag>0){
-    const nx=player.x+mvx/mag*player.speed*dt, ny=player.y+mvy/mag*player.speed*dt;
-    if(!roomSolid(nx,player.y)) player.x=Math.max(18,Math.min(ROOM.w-18,nx));
-    if(!roomSolid(player.x,ny)) player.y=Math.max(22,Math.min(ROOM.h-14,ny));
-    walkPhase+=dt*16;
-    const si=Math.floor(walkPhase/Math.PI);
-    if(si!==lastStep){ lastStep=si; playStep(); if(si%2===0) vibrate(1); }
-    if(mvx>0) player.face=1; else if(mvx<0) player.face=-1;
-  } else { walkPhase=0; lastStep=-1; }
-  if(attacking>0) attacking=Math.max(0,attacking-dt);
-  if(atkCd>0) atkCd=Math.max(0,atkCd-dt);
-  if(player.maxMp) player.mp=Math.min(player.maxMp,(player.mp||0)+dt*0.25);
-  centerRoomCam();
-  // 交互：柜台 / 门口
-  let best=null;
-  if(Math.hypot(player.x-ROOM.w/2, player.y-58)<34) best={k:'counter'};
-  else if(player.y>ROOM.h-30) best={k:'exitDoor'};
-  interactTarget=best; nearNpc=!!best;
-  updateHudButtons();
-}
-function openShop(){
-  document.getElementById('shopWrap').classList.remove('hidden');
-  sfxBeep();
-}
-document.getElementById('shopClose').onclick=()=>document.getElementById('shopWrap').classList.add('hidden');
-document.getElementById('shopBg').onclick=()=>document.getElementById('shopWrap').classList.add('hidden');
 
 // ---------- 训练假人 / 伤害跳字 ----------
 const DUMMY={x:726, y:470, flash:0, shake:0};
