@@ -937,7 +937,7 @@
     <div class="sp-group">
       <div class="sp-grid3">
         <button id="openRedeem" class="sp-full sp-alt">兑换码</button>
-        <button id="openStats" class="sp-full sp-alt">统计</button>
+        <button id="openStats" class="sp-full sp-alt" style="display:none">统计</button>
         <button id="openSave" class="sp-full sp-alt">存档</button>
       </div>
       <div id="buildTag" style="font-size:10px;color:#5b7089;text-align:center;padding:2px 0"></div>
@@ -2887,7 +2887,7 @@ function frame(now){
   if(state==='city' && !paused){
     sessionSec += dt; stats.totalSec += dt; statPlayAcc += dt; statHitAcc += dt;
     if(gtime - statsFlushAt > 10){ statsFlushAt=gtime; saveStats(); }
-    // 只统计本机，不做任何联网上报
+    if(statHitAcc >= 60){ statHitAcc=0; statHit('playtime'); }
   }
   try{
     if(state==='city' && !paused) update(dt);
@@ -4798,6 +4798,12 @@ function syncDevUI(){
 // ---------- 游玩统计 ----------
 const STAT_NS='nyxcaligo-stellar-echo';
 const STAT_KEY='xingchen_stats_v1';
+let statsUnlocked=false;
+try{ statsUnlocked = localStorage.getItem('xchen_stats_unlock')==='1'; }catch(e){}
+function applyStatsLock(){
+  const b=document.getElementById('openStats');
+  if(b) b.style.display = statsUnlocked ? '' : 'none';
+}
 let stats={sessions:0, totalSec:0, firstAt:0};
 let statsFlushAt=0, statRemote={visits:null, playtime:null, ok:false}, statPlayAcc=0, statHitAcc=0;
 function loadStats(){
@@ -4836,7 +4842,8 @@ function renderStats(){
     ['启动次数', stats.sessions+' 次'],
     ['首次游玩', stats.firstAt? new Date(stats.firstAt).toLocaleString('zh-CN'):'—'],
     ['', ''],
-    ['数据范围', '仅本机'],
+    ['全服访问', statRemote.visits!=null? statRemote.visits+' 次':'读取中/不可用'],
+    ['全服游玩', statRemote.playtime!=null? statRemote.playtime+' 分钟':'读取中/不可用'],
   ];
   for(const [k,v] of rows){
     if(!k){ const sp=document.createElement('div'); sp.style.height='8px'; body.appendChild(sp); continue; }
@@ -4848,9 +4855,12 @@ function renderStats(){
 }
 try{ document.getElementById('shopTitle').textContent='商店'; }catch(e){}
 document.getElementById('openStats').onclick=()=>{
+  if(!statsUnlocked) return;
   document.getElementById('statsTitle').textContent='游玩统计';
   document.getElementById('statsWrap').classList.remove('hidden');
   renderStats();
+  statGet('visits', v=>{ statRemote.visits=v; renderStats(); });
+  statGet('playtime', v=>{ statRemote.playtime=v; renderStats(); });
   sfxBeep();
 };
 document.getElementById('statsClose').onclick=()=>document.getElementById('statsWrap').classList.add('hidden');
@@ -4891,6 +4901,11 @@ document.getElementById('redeemOk').onclick=()=>{
   if(v===DEV_CODE){
     devMode=true; saveCfg(); syncDevUI();
     toastMsg('开发者模式已开启'); sfxEquip(); vibrate(3);
+  } else if(v==='STATS-ECHO-9F3K'){
+    statsUnlocked=true;
+    try{ localStorage.setItem('xchen_stats_unlock','1'); }catch(e){}
+    applyStatsLock();
+    toastMsg('统计面板已解锁（仅本机）'); sfxEquip(); vibrate(3);
   } else {
     toastMsg('兑换码无效');
   }
@@ -7361,6 +7376,7 @@ try{
   enableInstantTap(['menuBtn','eqToggle','devBtn','bagBtn','colBtn','craftBtn','charBtn','quadBtn',
                     'atkBtn','interactBtn']);
 }catch(e){}
+try{ applyStatsLock(); }catch(e){}
 try{ checkOrientation(); }catch(e){}
 try{ updateHudButtons(); }catch(e){}
 try{ buildMini(); }catch(e){}
@@ -7371,7 +7387,7 @@ try{ hasSave=loadGame(); }catch(e){ showFatal('loadGame: '+e.message); }
 try{ syncBagBtn(); }catch(e){ showFatal('syncBagBtn: '+e.message); }
 loadStats();
 stats.sessions++; if(!stats.firstAt) stats.firstAt=Date.now(); saveStats();
-// 不再向公共计数器上报访问
+statHit('visits');
 setInterval(()=>{ saveStats(); }, 20000); last=performance.now(); fpsLast=performance.now(); requestAnimationFrame(frame);
 </script>
 </body>
