@@ -141,7 +141,7 @@
                  box-shadow:inset 0 2px 0 #4a7ab5, inset 0 -2px 0 #16283f, 0 3px 0 #0b2545;
                  display:flex; align-items:center; justify-content:center; }
   #interactBtn.near { border-color:#f5c542; box-shadow:inset 0 1px 0 #5b6472, 0 0 10px #f5c542; }
-  #interactBtn.dim { opacity:.4; }
+  #interactBtn.dim { opacity:.4; pointer-events:none; filter:grayscale(.6); }
   #interactBtn.hidden { display:none; }
   #msgToast { position:fixed; z-index:60; left:50%; transform:translateX(-50%);
               bottom:calc(150px + env(safe-area-inset-bottom, 0px)); padding:8px 16px;
@@ -5126,7 +5126,9 @@ function hideToastNow(){
   if(el){ el.style.opacity='0'; }
   toastText=''; clearTimeout(toastTimer);
 }
-document.getElementById('interactBtn').onclick=()=>{
+document.getElementById('interactBtn').onclick=(ev)=>{
+  const ib=document.getElementById('interactBtn');
+  if(ib && (ib.classList.contains('dim') || !ib.classList.contains('near'))) return;
   if(talking || !interactTarget) return;
   const t=interactTarget;
   if(t.k==='drop'){ pickupDrop(t.d); return; }
