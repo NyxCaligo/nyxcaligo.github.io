@@ -1278,7 +1278,10 @@ function handleTap(vx,vy){
     if(vx>=El.wx-4 && vx<=El.wx+El.GW+4 && vy>=El.wy && vy<=El.wy+El.GH){
       const rel=(vx-El.wx-El.pad)/(El.WS+4);
       const idx=Math.max(0,Math.min(2,Math.round(rel)));
-      if(EQUIP.weapons[idx]){ heldSlot=idx; syncAtkCd(); sfxBeep(); vibrate(2); updateHudButtons(); }
+      if(EQUIP.weapons[idx]){
+        heldSlot=idx; syncAtkCd(); heldGlow=0.22;
+        sfxBeep(); vibrate(2); updateHudButtons();
+      }
       return;
     }
     const H=El.hudBox;
@@ -1657,6 +1660,7 @@ function update(dt){
     lastStep = -1;
   }
   if(attacking>0) attacking=Math.max(0,attacking-dt);
+  if(heldGlow>0) heldGlow=Math.max(0, heldGlow-dt);
   for(let i=0;i<atkCdSlots.length;i++){ if(atkCdSlots[i]>0) atkCdSlots[i]=Math.max(0,atkCdSlots[i]-dt); }
   syncAtkCd();
   {
@@ -3620,9 +3624,10 @@ function drawEquipHUD(){
       drawItemIconAt(ITEMS[EQUIP.weapons[i]].ic, ox, oy, S);
     }
     else drawText('?', x+(L.WS-6)/2, y+(L.WS-10)/2, '#7b8492', 2);
-    if(i===heldSlot && EQUIP.weapons[i] && atkCd>0){
+    const cdI = atkCdSlots[i]||0;
+    if(EQUIP.weapons[i] && cdI>0){
       const rate=(ITEMS[EQUIP.weapons[i]].rate||1.8);
-      const frac=Math.max(0,Math.min(1, atkCd/rate));
+      const frac=Math.max(0,Math.min(1, cdI/rate));
       const hgt=Math.round((L.WS-2)*frac);
       const top=y+L.WS-1-hgt;
       octx.fillStyle='rgba(6,10,18,.72)';
@@ -3630,7 +3635,7 @@ function drawEquipHUD(){
       octx.fillStyle='rgba(96,165,250,.85)';
       octx.fillRect(x+1, top, L.WS-2, 1);
       // 冷却精确到 0.1 秒
-      const txt=atkCd.toFixed(1);
+      const txt=cdI.toFixed(1);
       octx.font='7px Zpix, monospace';
       octx.textAlign='center'; octx.textBaseline='middle';
       octx.fillStyle='#060a12';
@@ -3642,6 +3647,12 @@ function drawEquipHUD(){
     if(i===heldSlot && EQUIP.weapons[i]){
       px(x-1,y-1,L.WS+2,1,'#f5c542'); px(x-1,y+L.WS,L.WS+2,1,'#f5c542');
       px(x-1,y-1,1,L.WS+2,'#f5c542'); px(x+L.WS,y-1,1,L.WS+2,'#f5c542');
+      if(heldGlow>0){
+        octx.globalAlpha=Math.max(0,Math.min(1, heldGlow/0.22))*0.85;
+        octx.strokeStyle='#fff3c4'; octx.lineWidth=1;
+        octx.strokeRect(x-0.5, y-0.5, L.WS+1, L.WS+1);
+        octx.globalAlpha=1;
+      }
     } }
   // 饰品
   eqGroup(L.sx,L.sy,L.GS,L.GSH,'饰品');
@@ -4100,7 +4111,7 @@ function renderEquipPanel(){
         {label:'查看', fn:()=>openItemDetail(cur)},
         {label:'卸下', fn:()=>{ vibrate(3); sfxEquip(); unequip(t,i); renderEquipPanel(); renderBag(); saveGame(); }}
       ], d);
-      bindItemSlot(d, ()=>{}, menu);        // 单击不弹任何界面，长按才出菜单
+      bindItemSlot(d, ()=>{}, ()=>openItemDetail(cur));   // 单击静默，长按直接查看数值
     }
     else {
       d.onclick=()=>{ sfxBeep(); };          // 空槽：静默
@@ -6140,6 +6151,7 @@ document.getElementById('dlgBox').onclick=()=>{
 const ATK_DUR=0.34;
 let attacking=0, heldSlot=0, atkCd=0;
 let atkCdSlots=[0,0,0];            // 每个武器槽独立的冷却
+let heldGlow=0;                    // 切换武器的柔和高光
 function syncAtkCd(){ atkCd = atkCdSlots[heldSlot]||0; }
 function sfxXp(){
   if(!actx||!sfxOn||mutedAll) return;
