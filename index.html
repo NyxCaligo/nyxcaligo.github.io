@@ -1550,6 +1550,7 @@ function setMap(name){
   }
   mapName=name;
   if(name==='forest'){
+    try{ setMusicMood('forest'); }catch(e){}
     if(!forestWorld){ const f=buildForestWorld(); forestWorld=f.world; forestRoad=f.road; forestWater=f.water; forestData=f; }
     forestObstacles=(forestData&&forestData.obstacles)||[];
     forestObsTile=(forestData&&forestData.obsTile)||null;
@@ -1565,6 +1566,7 @@ function setMap(name){
     world=townData.world; tileRoadCnt=townData.road; tileWaterCnt=townData.water;
     BUILDINGS=townData.buildings; PROPS=townData.props;
     MW=townData.MW; MH=townData.MH; waterMask=townData.waterMask; roadMask=townData.roadMask;
+    try{ setMusicMood('town'); }catch(e){}
   }
   WORLD_W=WCOLS*TILE; WORLD_H=WROWS*TILE;
   chunkCache.clear();
@@ -2913,7 +2915,8 @@ let actx=null, master=null, noteBus=null, sfxGain=null, musicOn=true, sfxOn=true
 let musicVol=0.6, sfxVol=0.7, noiseBuf=null, lastStep=-1;
 let nextTime=0, beatIndex=0;
 const BPM=72, BEAT=60/BPM;
-const BEAT_TOWN=60/126;
+const BEAT_TOWN=60/144;
+const BEAT_FOREST=60/54;
 const TOWN_BARS=[
   {chord:[293.66,369.99,440.00,587.33], bass:146.83},
   {chord:[329.63,415.30,493.88,659.25], bass:164.81},
@@ -2921,8 +2924,29 @@ const TOWN_BARS=[
   {chord:[349.23,440.00,523.25,698.46], bass:174.61},
 ];
 const TOWN_PENTA=[587.33,659.25,739.99,880.00,987.77,1174.66];
+const TOWN_BARS2=[
+  {chord:[293.66,369.99,440.00,587.33], bass:146.83},
+  {chord:[329.63,415.30,493.88,659.25], bass:164.81},
+  {chord:[261.63,329.63,392.00,523.25], bass:130.81},
+  {chord:[349.23,440.00,523.25,698.46], bass:174.61},
+  {chord:[392.00,493.88,587.33,783.99], bass:196.00},
+  {chord:[440.00,554.37,659.25,880.00], bass:220.00},
+];
+// 森林：悠远秘境（A 小调）
+const FOREST_BARS=[
+  {chord:[220.00,261.63,329.63], bass:110.00},
+  {chord:[174.61,220.00,261.63], bass:87.31},
+  {chord:[196.00,246.94,293.66], bass:98.00},
+  {chord:[261.63,329.63,392.00], bass:130.81},
+];
+const FOREST_SCALE=[440.00,523.25,587.33,659.25,783.99,880.00,1046.50];
 let musicMood='title';
-function curBeat(){ return musicMood==='town'?BEAT_TOWN:BEAT; }
+function curBeat(){
+  // 互换：森林用较快的"城镇"节奏，主城用悠远的秘境节奏
+  if(musicMood==='forest') return BEAT_TOWN;
+  if(musicMood==='town') return BEAT_FOREST;
+  return BEAT;
+}
 function setMusicMood(m){ musicMood=m; beatIndex=0; if(actx) nextTime=actx.currentTime+0.1; }
 
 function initAudio(){
@@ -2962,9 +2986,42 @@ const BARS=[
   {chord:[196.00,246.94,293.66,392.00], bass:98.00},
 ];
 const PENTA=[523.25,587.33,659.25,783.99,880.00];
+function perc(kind, t){
+  if(!actx) return;
+  if(kind==='kick'){
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.type='sine';
+    o.frequency.setValueAtTime(130, t);
+    o.frequency.exponentialRampToValueAtTime(46, t+0.12);
+    g.gain.setValueAtTime(0.14, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.19);
+    o.connect(g); g.connect(noteBus); o.start(t); o.stop(t+0.22);
+  } else if(noiseBuf){
+    const src=actx.createBufferSource(); src.buffer=noiseBuf;
+    const hp=actx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=6200;
+    const g=actx.createGain();
+    g.gain.setValueAtTime(0.045, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.06);
+    src.connect(hp); hp.connect(g); g.connect(noteBus);
+    src.start(t); src.stop(t+0.08);
+  }
+}
+function windSwell(t){
+  if(!actx || !noiseBuf) return;
+  const src=actx.createBufferSource(); src.buffer=noiseBuf; src.loop=true;
+  const bp=actx.createBiquadFilter();
+  bp.type='bandpass'; bp.frequency.value=620+Math.random()*420; bp.Q.value=5;
+  const g=actx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.022, t+1.1);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+3.4);
+  src.connect(bp); bp.connect(g); g.connect(noteBus);
+  src.start(t); src.stop(t+3.6);
+}
+
 function scheduleBeat(bi, t){
-  const town=musicMood==='town';
-  const bars=town?TOWN_BARS:BARS, penta=town?TOWN_PENTA:PENTA, beat=curBeat();
+  const town=musicMood==='forest';      // 欢快的那套给森林
+  const bars=town?TOWN_BARS2:BARS, penta=town?TOWN_PENTA:PENTA, beat=curBeat();
   const bar=Math.floor(bi/4)%bars.length, b=bi%4;
   if(b===0){
     for(const f of bars[bar].chord) note(f, t, beat*4*0.9, 'sine', 0.05, 0.8, 1.4);
@@ -2974,9 +3031,37 @@ function scheduleBeat(bi, t){
     note(penta[Math.floor(Math.random()*penta.length)], t, beat*1.1, 'triangle', 0.03, 0.15, 0.9);
   }
   if(town){
-    if(b===0 && Math.random()<0.7) note(penta[Math.floor(Math.random()*penta.length)]*2, t+beat*0.5, beat*0.7, 'square', 0.011, 0.1, 0.8);
-    if(b===1 && Math.random()<0.7) note(penta[Math.floor(Math.random()*penta.length)]*2, t, beat*0.8, 'square', 0.012, 0.1, 0.8);
-    if(b===3 && Math.random()<0.5) note(penta[Math.floor(Math.random()*penta.length)]*2, t+beat*0.5, beat*0.6, 'triangle', 0.02, 0.12, 0.8);
+    // 鼓点：强拍底鼓 + 弱拍踩镲
+    if(b===0 || b===2) perc('kick', t);
+    if(b===1 || b===3) perc('hat', t);
+    perc('hat', t+beat*0.5);
+    // 每拍琶音（按和弦音上行，轻快）
+    const arp=bars[bar].chord;
+    const hai=arp[(bi+bar)%arp.length]*2;
+    note(hai, t, beat*0.55, 'square', 0.012, 0.03, 0.5);
+    if(b%2===1) note(hai*1.5, t+beat*0.5, beat*0.4, 'triangle', 0.010, 0.03, 0.4);
+    // 原有旋律加花
+    if(b===0 && Math.random()<0.85) note(penta[Math.floor(Math.random()*penta.length)]*2, t+beat*0.5, beat*0.7, 'square', 0.012, 0.06, 0.7);
+    if(b===1 && Math.random()<0.8) note(penta[Math.floor(Math.random()*penta.length)]*2, t, beat*0.8, 'square', 0.013, 0.06, 0.7);
+    if(b===3 && Math.random()<0.6) note(penta[Math.floor(Math.random()*penta.length)]*2, t+beat*0.5, beat*0.6, 'triangle', 0.02, 0.08, 0.7);
+  }
+  if(musicMood==='town'){
+    // 悠远：长音铺底 + 稀疏钟声 + 风声
+    if(b===0){
+      for(const f of FOREST_BARS[Math.floor(bi/4)%FOREST_BARS.length].chord){
+        note(f, t, beat*2.2, 'sine', 0.045, 1.6, 2.6);
+      }
+      note(FOREST_BARS[Math.floor(bi/4)%FOREST_BARS.length].bass, t, beat*3.0, 'sine', 0.07, 1.2, 2.4);
+      if(Math.random()<0.6) windSwell(t);
+    }
+    if((b===2 && Math.random()<0.5) || (b===3 && Math.random()<0.28)){
+      const f=FOREST_SCALE[Math.floor(Math.random()*FOREST_SCALE.length)];
+      note(f, t, beat*1.6, 'triangle', 0.028, 0.06, 1.6);
+      note(f*2, t+beat*0.28, beat*1.2, 'sine', 0.014, 0.05, 1.4);   // 回声
+    }
+    if(b===1 && Math.random()<0.18){
+      note(FOREST_SCALE[Math.floor(Math.random()*FOREST_SCALE.length)]/2, t, beat*2.4, 'sine', 0.02, 0.4, 2.0);
+    }
   }
 }
 function scheduler(){
@@ -3474,7 +3559,7 @@ function drawEquipHUD(){
   eqGroup(L.wx,L.wy,L.GW,L.GH,'武器');
   for(let i=0;i<3;i++){ const x=L.wx+L.pad+i*(L.WS+4), y=L.wy+L.labelH+L.pad;
     eqSlot(x,y,L.WS);
-    if(EQUIP.weapons[i] && ITEMS[EQUIP.weapons[i]]) drawItemIcon(ITEMS[EQUIP.weapons[i]].ic, x, y, L.WS/16);
+    if(EQUIP.weapons[i] && ITEMS[EQUIP.weapons[i]]) drawItemIcon(ITEMS[EQUIP.weapons[i]].ic, x-1, y-1, L.WS/16*1.12);
     else drawText('?', x+(L.WS-6)/2, y+(L.WS-10)/2, '#7b8492', 2);
     if(i===heldSlot && EQUIP.weapons[i] && atkCd>0){
       const rate=(ITEMS[EQUIP.weapons[i]].rate||1.8);
@@ -3584,7 +3669,9 @@ function drawItemIcon(ic, ox, oy, sc){
   const im=itemImg(ic);
   if(im && im.complete && im.naturalWidth>0){
     const S=Math.round(16*sc);
-    octx.imageSmoothingEnabled=false;
+    // 放大用最近邻（像素风），缩小用平滑（避免 32→22 失真）
+    octx.imageSmoothingEnabled = S < 32;
+    if(S < 32) octx.imageSmoothingQuality='high';
     octx.drawImage(im, ox, oy, S, S);
     octx.imageSmoothingEnabled=true;
     return;
@@ -3596,7 +3683,13 @@ function drawItemIcon(ic, ox, oy, sc){
   else if(ic==='helm'){ R(5,2,6,1,'#9aa5b1'); R(4,3,8,1,'#9aa5b1'); R(3,4,10,5,'#9aa5b1'); R(6,6,4,2,'#232c38'); R(3,9,10,2,'#74808e'); }
   else if(ic==='chest'){ R(5,2,6,2,'#9aa5b1'); R(2,3,3,4,'#74808e'); R(11,3,3,4,'#74808e'); R(4,4,8,7,'#9aa5b1'); R(7,4,2,2,'#232c38'); R(5,9,6,2,'#74808e'); }
   else if(ic==='greave'){ R(4,3,4,5,'#9aa5b1'); R(9,3,4,5,'#9aa5b1'); R(4,8,4,1,'#74808e'); R(9,8,4,1,'#74808e'); R(4,9,4,4,'#9aa5b1'); R(9,9,4,4,'#9aa5b1'); R(2,12,5,2,'#74808e'); R(9,12,5,2,'#74808e'); }
-  else if(ic==='woodsword'){ R(7,1,2,9,'#c98a4b'); R(7,1,1,9,'#e0a86a'); R(5,10,6,2,'#8a5a2b'); R(7,12,2,3,'#6b4423'); R(7,14,2,1,'#a87c50'); }
+  else if(ic==='woodsword'){
+    // 斜向木剑（与 woodsword.png 一致：右下到左上）
+    R(10,1,3,2,'#c98a4b'); R(9,3,3,2,'#e0a86a'); R(8,5,3,2,'#c98a4b');
+    R(6,6,3,2,'#d4b24a');            // 护手
+    R(5,8,3,2,'#c98a4b'); R(4,9,2,2,'#8a5a2b');
+    R(2,11,3,3,'#6b4423'); R(2,13,2,2,'#a87c50');   // 柄
+  }
   else if(ic==='ring'){ R(5,6,6,1,'#d4b24a'); R(4,7,1,4,'#d4b24a'); R(11,7,1,4,'#d4b24a'); R(5,11,6,1,'#d4b24a'); R(7,4,2,2,'#7fd4ff'); }
   else if(ic==='amulet'){ R(5,2,1,3,'#d4b24a'); R(10,2,1,3,'#d4b24a'); R(6,5,4,5,'#d4b24a'); R(7,7,2,2,'#7fd4ff'); }
   else { R(7,2,2,2,'#7fd4ff'); R(5,4,6,2,'#8fe3ff'); R(4,6,8,3,'#7fd4ff'); R(6,9,4,2,'#5fb8e6'); R(7,11,2,2,'#4a9ccc'); }
