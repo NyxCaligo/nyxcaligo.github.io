@@ -723,6 +723,9 @@
     <button id="devClear2" class="sp-full sp-alt">清空背包</button>
     <button id="devResetStory2" class="sp-full sp-alt">重置剧情对话</button>
     <button id="devSlime2" class="sp-full sp-alt">召唤 3 只史莱姆</button>
+    <button id="devSpider" class="sp-full sp-alt">召唤 2 只蜘蛛</button>
+    <button id="devCat" class="sp-full sp-alt">召唤 2 只大毛毛虫</button>
+    <button id="devRockTree" class="sp-full sp-alt">放一块岩石 + 一棵树</button>
     <button id="devGod" class="sp-full sp-alt">无敌模式：关</button>
     <button id="devOneHit" class="sp-full sp-alt">一刀秒杀：关</button>
     <button id="devClearMobs" class="sp-full sp-alt">清理所有怪物</button>
@@ -1580,6 +1583,13 @@ function setMap(name){
 // ---------- 碰撞 ----------
 function solidAt(px,py){
   if(mapName==='forest' && forestWorld) return forestSolid(px,py);
+  // 静态生物（树/岩石）也挡路
+  if(typeof slimes!=='undefined'){
+    for(const s of slimes){
+      if(!s.static) continue;
+      if(Math.abs(s.x-px)<14 && Math.abs(s.y-py)<14) return true;
+    }
+  }
   const tx=Math.floor(px/TILE), ty=Math.floor(py/TILE);
   if(tx<0||ty<0||tx>=WCOLS||ty>=WROWS) return true;
   if(world[ty][tx]!==0) return true;
@@ -2816,7 +2826,7 @@ function render(){
     ds.push({bottom:REVIVE_POINT.y, draw:drawShrine});
     ds.push({bottom:99999, draw:drawGate});
   }
-  for(const sl of slimes) ds.push({bottom:sl.y, draw:()=>drawSlime(sl)});
+  for(const sl of slimes) ds.push({bottom:sl.y, draw:()=>drawCreature(sl)});
   ds.sort((a,b)=>a.bottom-b.bottom);
   for(const d of ds){ if(d.bottom<=player.y) d.draw(); }
   if(dead){
@@ -3669,6 +3679,7 @@ const ITEMS={
   woodsword:{n:'木剑', t:'weapon', ic:'woodsword', sub:'近战武器', sell:20,
              desc:'基础的武器。', dmg:5, rate:1.8, crit:4, critMult:CRIT_MULT, kb:1},
   wood:{n:'木头', t:'mat', ic:'wood', desc:'最基础的材料。', sell:2},
+  stone:{n:'石头', t:'mat', ic:'stone', desc:'坚硬的石块，可以做石制装备。', sell:2},
   potion:{n:'治疗药剂', t:'cons', ic:'potion', sub:'消耗品', sell:3, heal:10, cd:1.5, price:7,
           desc:'闻起来有股清甜。'},
   woodhelm:{n:'木头盔', t:'armor', ic:'helm', sub:'防具', slot:'helm', desc:'基础的防具。', armor:1, set:'wood', sell:12},
@@ -3730,6 +3741,10 @@ function drawItemIcon(ic, ox, oy, sc){
     R(6,6,3,2,'#d4b24a');            // 护手
     R(5,8,3,2,'#c98a4b'); R(4,9,2,2,'#8a5a2b');
     R(2,11,3,3,'#6b4423'); R(2,13,2,2,'#a87c50');   // 柄
+  }
+  else if(ic==='stone'){
+    R(6,4,4,2,'#9aa5b1'); R(4,6,8,5,'#8b95a2'); R(3,9,10,3,'#7b8592');
+    R(5,5,2,1,'#b0bbc7'); R(9,8,2,2,'#5b6470');
   }
   else if(ic==='ring'){ R(5,6,6,1,'#d4b24a'); R(4,7,1,4,'#d4b24a'); R(11,7,1,4,'#d4b24a'); R(5,11,6,1,'#d4b24a'); R(7,4,2,2,'#7fd4ff'); }
   else if(ic==='amulet'){ R(5,2,1,3,'#d4b24a'); R(10,2,1,3,'#d4b24a'); R(6,5,4,5,'#d4b24a'); R(7,7,2,2,'#7fd4ff'); }
@@ -4099,13 +4114,31 @@ function openItemDetail(id, anchor, fromCollection){
   }
   positionDetail(anchor);
 }
+const mobIconCache={};
+function mobIconURL(kind){
+  if(mobIconCache[kind]) return mobIconCache[kind];
+  try{
+    const cv=document.createElement('canvas'); cv.width=48; cv.height=48;
+    const g=cv.getContext('2d'); if(!g) return SLIME_ART;
+    g.imageSmoothingEnabled=false;
+    const savedO=octx, sx=camX, sy=camY;
+    octx=g; camX=0; camY=0;
+    const fake=newSlime(24, 36, kind||'slime');
+    fake.wob=0; fake.hitFlash=0;
+    drawCreature(fake);
+    octx=savedO; camX=sx; camY=sy;
+    const url=cv.toDataURL();
+    mobIconCache[kind]=url;
+    return url;
+  }catch(e){ return SLIME_ART; }
+}
 function openMobDetail(key, anchor){
   const m=MOBS[key]; if(!m) return;
   document.getElementById('detailName').textContent=m.n;
   const ic=document.getElementById('detailIcon');
   ic.innerHTML='';
   const img=document.createElement('img');
-  img.src=SLIME_ART; img.style.cssText='width:34px;height:34px;image-rendering:pixelated';
+  img.src=mobIconURL(key); img.style.cssText='width:34px;height:34px;image-rendering:pixelated';
   ic.appendChild(img);
   document.getElementById('detailDesc').textContent=m.desc||'';
   document.getElementById('detailBox').style.borderColor='#2f6b3a';
@@ -4189,18 +4222,32 @@ function bindCatBtns(){
 }
 function ph(n){ const a=[]; for(let i=0;i<n;i++) a.push({n:''}); return a; }
 const MOBS={
-  slime:{n:'史莱姆', hp:20, armor:0, dmg:4, xp:8, coin:'1~4 铜币', speed:52, kb:2, weight:1,
+  slime:{n:'史莱姆', hp:20, armor:0, dmg:4, xp:8, coin:'1~4 铜币', coinMin:1, coinMax:4, speed:58, kb:2, weight:1,
          detect:220,
          drops:['铜币','经验球'],
-         desc:'会锁定目标的绿色黏液，靠近后会扑咬。'}
+         desc:'会锁定目标的绿色黏液，靠近后会扑咬。'},
+  spider:{n:'蜘蛛', hp:25, armor:0, dmg:6, xp:12, coin:'3~6 铜币', coinMin:3, coinMax:6, speed:68, kb:2, weight:0.5,
+         detect:170,
+         drops:['铜币','经验球'],
+         desc:'林间猎手。速度极快，但视野不宽，贴脸才发现你。'},
+  caterpillar:{n:'大毛毛虫', hp:35, armor:2, dmg:5, xp:10, coin:'2~5 铜币', coinMin:2, coinMax:5, speed:30, kb:1, weight:2,
+         detect:150, neutral:true,
+         drops:['铜币','经验球'],
+         desc:'温和的巨型幼虫，平时慢慢爬。被攻击后会发怒反击。'},
+  rock:{n:'岩石', hp:40, armor:2, dmg:0, xp:0, coin:'—', coinMin:0, coinMax:0, speed:0, kb:0, weight:99,
+         static:true, block:true, harvest:true,
+         drops:['石头'], desc:'可以敲碎的石头，里面也许有东西。'},
+  tree:{n:'树', hp:30, armor:0, dmg:0, xp:0, coin:'—', coinMin:0, coinMax:0, speed:0, kb:0, weight:99,
+         static:true, block:true, harvest:true,
+         drops:['木头'], desc:'普通的树。砍倒可以得到木头。'}
 };
 let seenMobs=new Set();
 const COLLECTION={
   mob:{
     friendly:ph(12),
-    idle:ph(12),
-    neutral:ph(12),
-    hostile:[{mob:'slime'}].concat(ph(11))
+    idle:[{mob:'tree'},{mob:'rock'}].concat(ph(10)),
+    neutral:[{mob:'caterpillar'}].concat(ph(11)),
+    hostile:[{mob:'slime'},{mob:'spider'}].concat(ph(10))
   },
   equip:{
     weapon:[{id:'woodsword'}].concat(ph(19)),
@@ -4234,7 +4281,7 @@ function renderCollection(){
     if(e.mob && unlocked){
       const d2=document.createElement('div'); d2.className='col-slot';
       const cv=document.createElement('img');
-      cv.src=SLIME_ART; cv.style.cssText='width:34px;height:34px;image-rendering:pixelated;';
+      cv.src=mobIconURL(e.mob); cv.style.cssText='width:34px;height:34px;image-rendering:pixelated;';
       d2.appendChild(cv);
       const nm=document.createElement('span'); nm.className='cname'; nm.textContent=MOBS[e.mob].n;
       d2.appendChild(nm);
@@ -4895,6 +4942,11 @@ document.getElementById('devBg').onclick=()=>document.getElementById('devWrap').
 document.getElementById('devAll2').onclick=()=>{ for(const id in ITEMS) addItem(id,1); renderBag(); saveGame(); toastMsg('已加入全部物品'); };
 document.getElementById('devClear2').onclick=()=>{ bagItems=[]; renderBag(); saveGame(); toastMsg('背包已清空'); };
 document.getElementById('devSlime2').onclick=()=>{ spawnSlimeNear(3); };
+document.getElementById('devSpider').onclick=()=>{ spawnNear('spider',2); };
+document.getElementById('devCat').onclick=()=>{ spawnNear('caterpillar',2); };
+document.getElementById('devRockTree').onclick=()=>{
+  spawnNear('rock',1, 60); spawnNear('tree',1, 90);
+};
 document.getElementById('devOneHit').onclick=(e)=>{
   oneHitKill=!oneHitKill;
   e.target.textContent='一刀秒杀：'+(oneHitKill?'开':'关');
@@ -6080,7 +6132,7 @@ function doAttack(){
       if(sd<36 && (sdx*player.face)>=-8) hits.push({sl, sd});
     }
     hits.sort((a,b)=>a.sd-b.sd);
-    for(const h of hits.slice(0,5)){
+    for(const h of hits){        // 无限穿透：范围内全部命中
       const crit2=Math.random()*100<(it2.crit||4);
       let dmg2=Math.max(1, Math.round((it2.dmg||5)*(crit2?(it2.critMult||1.7):1)));
       if(oneHitKill) dmg2=Math.max(dmg2, h.sl.hp);
@@ -6104,11 +6156,17 @@ const SLIME_ART='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABze
 let slimeImg=null;
 let slimes=[];
 let godMode=false, oneHitKill=false;
-function newSlime(x,y){
-  return {x, y, hp:20, maxHp:20, dmg:4, r:10, vx:0, vy:0,
-          iframe:0, atkCd:1, hitFlash:0, atkAnim:0, wob:Math.random()*6, face:1, armor:0, resist:0,
+function newSlime(x,y,kind){
+  const k=kind||'slime';
+  const m=MOBS[k]||MOBS.slime;
+  return {kind:k, x, y,
+          hp:m.hp, maxHp:m.hp, dmg:m.dmg||0, r:(m.static?11:10), vx:0, vy:0,
+          iframe:0, atkCd:1, hitFlash:0, atkAnim:0, wob:Math.random()*6, face:1,
+          armor:m.armor||0, resist:0,
           side:Math.random()<0.5?1:-1, stuck:0,
-          alert:false, detectR:220, wanderT:0, wanderX:0, wanderY:0};
+          speed:m.speed||52, static:!!m.static, neutral:!!m.neutral,
+          alert:false, angry:false, detectR:m.detect||220,
+          wanderT:0, wanderX:0, wanderY:0};
 }
 let playerIframe=0, playerHurt=0, guardTalked=false;
 let guardQuest=false, questSlimes=[], questCleared=false;
@@ -6226,6 +6284,26 @@ function doRevive(){
   updateHudButtons();
 }
 let orbs=[], chunks=[], splats=[];
+function spawnNear(kind,n,dist){
+  const cnt=n||1, base=dist||(70+Math.random()*50);
+  for(let i=0;i<cnt;i++){
+    const a=Math.random()*Math.PI*2;
+    const r=base+Math.random()*40;
+    let sx=player.x+Math.cos(a)*r, sy=player.y+Math.sin(a)*r;
+    let tries=0;
+    while(solidAt(sx,sy) && tries<20){
+      const a2=Math.random()*Math.PI*2;
+      sx=player.x+Math.cos(a2)*r; sy=player.y+Math.sin(a2)*r; tries++;
+    }
+    sx=splayerGuardX(sx); sy=splayerGuardY(sy);
+    const c=newSlime(sx,sy,kind);
+    if(!c.static) c.alert=true;
+    slimes.push(c);
+  }
+  seenMobs.add(kind);
+  toastMsg('附近出现了 '+(MOBS[kind]?MOBS[kind].n:kind));
+  sfxCrit();
+}
 function spawnSlimeNear(n){
   const cnt=n||1;
   for(let i=0;i<cnt;i++){
@@ -6288,6 +6366,7 @@ function knockbackForce(kb, weight){
   return Math.min(180, 80*k/(k+w));
 }
 function hitSlime(s, dmg, crit, kb){
+  if(s.neutral){ s.angry=true; s.angryT=10; s.alert=true; }
   if(!s || s.iframe>0) return;
   s.iframe=0.4; s.hitFlash=0.2;
   s.hp-=dmg;
@@ -6306,10 +6385,22 @@ function killSlime(s){
     try{ sfxEquip(); vibrate(3); }catch(e){}
     saveGame();
   }
-  // 经验球 + 铜币（爆发）
-  for(let i=0;i<2;i++) orbs.push({kind:'xp', x:s.x, y:s.y-6, vx:(Math.random()*2-1)*70, vy:-Math.random()*70-30, life:60, val:4});
-  const coinN=1+Math.floor(Math.random()*4);
-  for(let i=0;i<coinN;i++) orbs.push({kind:'coin', x:s.x, y:s.y-6, vx:(Math.random()*2-1)*80, vy:-Math.random()*80-30, life:60, val:1});
+  const mob=MOBS[s.kind||'slime']||MOBS.slime;
+  if(!mob.harvest){
+    // 经验球
+    const xpVal = Math.max(3, Math.round((mob.xp||8)/2));
+    for(let i=0;i<2;i++) orbs.push({kind:'xp', x:s.x, y:s.y-6, vx:(Math.random()*2-1)*70, vy:-Math.random()*70-30, life:60, val:xpVal});
+    // 铜币：按每种怪的区间
+    const cmin=mob.coinMin!=null?mob.coinMin:1, cmax=mob.coinMax!=null?mob.coinMax:4;
+    const coinN=cmin+Math.floor(Math.random()*(cmax-cmin+1));
+    for(let i=0;i<coinN;i++) orbs.push({kind:'coin', x:s.x, y:s.y-6, vx:(Math.random()*2-1)*80, vy:-Math.random()*80-30, life:60, val:1});
+  }
+  // 采集类（树/岩石）：直接给材料
+  if(mob.harvest && mob.drops && mob.drops.length){
+    for(const id of mob.drops){
+      if(ITEMS[id]) { addItem(id, 1+Math.floor(Math.random()*2)); toastMsg('获得 '+ITEMS[id].n); }
+    }
+  }
   // 尸块
   for(let i=0;i<5;i++){
     const a=Math.random()*Math.PI*2;
@@ -6561,6 +6652,11 @@ function updateSlime(dt){
     return;
   }
   for(const s of slimes){
+    // 静态物体（树/岩石）：不移动、不攻击
+    if(s.static){
+      if(s.hitFlash>0) s.hitFlash=Math.max(0,s.hitFlash-dt);
+      continue;
+    }
     // 自愈：万一卡在障碍里，挤到最近的可走位置
     if(solidAt(s.x,s.y)){
       let freed=false;
@@ -6581,12 +6677,20 @@ function updateSlime(dt){
     // ---- 侦测：以自身为圆心（试炼怪不适用） ----
     if(s.quest){
       s.alert = true;
+    } else if(s.neutral && !s.angry){
+      s.alert = false;          // 中立：不主动敌对
     } else {
       const DR = s.detectR || 220;
       if(!s.alert && dist <= DR) s.alert = true;
       else if(s.alert && dist > DR + 45) s.alert = false;
     }
 
+    if(s.angry){
+      s.angryT=(s.angryT||0)-dt;
+      // 发怒后跑出侦测范围 → 放弃
+      if(dist > (s.detectR||150) + 45){ s.angry=false; s.alert=false; s.angryT=0; }
+      if(s.angryT<=0){ s.angry=false; s.alert=false; }
+    }
     if(!s.alert){
       // 未发现玩家：随机游荡（不追击、不攻击）
       s.wanderT -= dt;
@@ -6611,7 +6715,7 @@ function updateSlime(dt){
     }
     s.x+=s.vx*dt; s.y+=s.vy*dt;
     s.vx*=Math.pow(0.001,dt); s.vy*=Math.pow(0.001,dt);
-    const speed=52;
+    const speed = s.angry ? 45 : (s.speed || 52);
     if(dist>14){
       const dxn=dx/dist, dyn=dy/dist;
       const step=speed*dt;
@@ -7180,6 +7284,155 @@ function hitDummy(){
   sfxHit();
   vibrate(crit?2:1);
   if(crit) try{ sfxCrit(); }catch(e){}
+}
+function drawCreature(SLIME){
+  const k=SLIME.kind||'slime';
+  if(k==='spider') return drawSpider(SLIME);
+  if(k==='caterpillar') return drawCaterpillar(SLIME);
+  if(k==='rock') return drawRock(SLIME);
+  if(k==='tree') return drawTreeMob(SLIME);
+  return drawSlime(SLIME);
+}
+function drawSpider(S){
+  const cx=S.x-camX, by=S.y-camY;
+  const t=S.wob*0.6;
+  octx.globalAlpha=0.22; octx.fillStyle='#000';
+  octx.beginPath(); octx.ellipse(cx, by+2, 12, 3, 0,0,7); octx.fill(); octx.globalAlpha=1;
+
+  const legA='#8a4433', legB='#5a2a1f';
+  // 每侧 4 条腿：从身体两侧伸出，先向外上、再向下折
+  for(const side of [-1,1]){
+    for(let i=0;i<4;i++){
+      const bx=cx+side*4;
+      const byy=by-7+i*2.2;
+      const kneeX=bx+side*(8+i*0.6);
+      const kneeY=byy-4-i*0.6;
+      const footX=kneeX+side*(5+i*0.4);
+      const footY=kneeY+8+i*0.8;
+      // 大腿
+      for(let k=0;k<=4;k++){
+        const t2=k/4;
+        const x=Math.round(bx+(kneeX-bx)*t2), y=Math.round(byy+(kneeY-byy)*t2);
+        px(x, y, 2, 2, legA);
+      }
+      // 小腿
+      for(let k=0;k<=4;k++){
+        const t2=k/4;
+        const x=Math.round(kneeX+(footX-kneeX)*t2), y=Math.round(kneeY+(footY-kneeY)*t2);
+        px(x, y, 2, 2, k>2?legB:legA);
+      }
+      if(i===0 && !S.hitFlash) px(Math.round(kneeX), Math.round(kneeY), 2, 2, '#a85a44');
+    }
+  }
+  // 腹部（后）
+  px(cx-6, by-11, 12, 8, '#3a2a35');
+  px(cx-5, by-13, 10, 5, '#4a3442');
+  px(cx-4, by-14, 8, 3, '#553c4d');
+  px(cx-3, by-13, 3, 2, '#7a4a6b');
+  px(cx+1, by-11, 2, 2, '#7a4a6b');
+  // 头部（前）
+  px(cx-4, by-7, 8, 6, '#2a1f26');
+  px(cx-3, by-8, 6, 2, '#3a2b33');
+  // 7 只眼
+  const eyes=[[-3,-5],[0,-5],[3,-5],[-2,-3],[2,-3],[0,-3],[-1,-1]];
+  for(const [ex,ey] of eyes){ px(cx+ex, by+ey, 1, 1, '#fef6e4'); }
+  if(S.hitFlash>0){
+    octx.globalAlpha=Math.min(0.7, S.hitFlash*4);
+    octx.fillStyle='#fff'; octx.fillRect(cx-16, by-15, 32, 18);
+    octx.globalAlpha=1;
+  }
+  drawMobHpBar(S, cx, by-19, 22);
+}
+function drawCaterpillar(S){
+  const cx=S.x-camX, by=S.y-camY;
+  const dir=S.face>=0?1:-1;          // 头始终朝行进方向
+  octx.globalAlpha=0.2; octx.fillStyle='#000';
+  octx.beginPath(); octx.ellipse(cx, by+2, 17, 3, 0,0,7); octx.fill(); octx.globalAlpha=1;
+
+  const segs=5;
+  const wave=S.wob*1.6;
+  for(let i=segs-1;i>=0;i--){
+    // 从尾部往头部画，节间有蠕动位移（沿前进方向来回）
+    const crawl=Math.sin(wave - i*0.9)*1.2;
+    const x=cx - dir*(i*6) + dir*crawl;
+    const y=by-7+Math.sin(wave*0.5 + i*0.7)*0.9;
+    const r=(i===0)?5:(i===1?5:4.6);
+    // 身体
+    px(x-r, y-r, r*2, r*2, '#7ec850');
+    px(x-r+1, y-r+1, r*2-2, 2, '#a8e87a');
+    px(x-r, y+r-2, r*2, 2, '#5da33a');
+    // 紫斑
+    px(x-1, y-1, 3, 3, '#6b4a7a');
+    // 黑色小腿（每节两侧各一只，随蠕动上下）
+    const legY=y+r-1+Math.round(Math.sin(wave - i*1.2)*1.2);
+    px(x-r+1, legY, 2, 2, '#2a1f26');
+    px(x+r-3, legY, 2, 2, '#2a1f26');
+  }
+  // 头（比身体大、更亮，没有五官）
+  const hx=cx+dir*6, hy=by-8;
+  px(hx-7, hy-7, 14, 14, '#8ed85c');
+  px(hx-6, hy-6, 12, 3, '#b8f08a');
+  px(hx-7, hy+5, 14, 2, '#5da33a');
+  px(hx-5, hy-5, 4, 2, '#c8f6a0');
+  px(hx-3, hy-9, 2, 2, '#6b9c46');
+  px(hx+2, hy-9, 2, 2, '#6b9c46');
+  if(S.hitFlash>0){
+    octx.globalAlpha=Math.min(0.7, S.hitFlash*4);
+    octx.fillStyle='#fff'; octx.fillRect(cx-18, by-17, 36, 19);
+    octx.globalAlpha=1;
+  }
+  drawMobHpBar(S, cx, by-20, 26);
+}
+function drawRock(S){
+  const cx=S.x-camX, by=S.y-camY;
+  octx.globalAlpha=0.24; octx.fillStyle='#000';
+  octx.beginPath(); octx.ellipse(cx, by+2, 12, 3, 0,0,7); octx.fill(); octx.globalAlpha=1;
+  // 岩石三角轮廓
+  px(cx-9, by-2, 18, 4, '#5b6470');
+  px(cx-8, by-6, 16, 5, '#6b7480');
+  px(cx-6, by-10, 12, 5, '#7b8592');
+  px(cx-4, by-13, 8, 4, '#8b95a2');
+  px(cx-3, by-14, 5, 2, '#9aa5b1');
+  // 高光/裂纹
+  px(cx-4, by-12, 3, 2, '#b0bbc7');
+  px(cx+1, by-9, 1, 4, '#4e5762');
+  px(cx-6, by-5, 4, 1, '#4e5762');
+  if(S.hitFlash>0){
+    octx.globalAlpha=Math.min(0.7, S.hitFlash*4);
+    octx.fillStyle='#fff'; octx.fillRect(cx-10, by-15, 20, 18);
+    octx.globalAlpha=1;
+  }
+}
+function drawTreeMob(S){
+  const cx=S.x-camX, by=S.y-camY;
+  octx.globalAlpha=0.24; octx.fillStyle='#000';
+  octx.beginPath(); octx.ellipse(cx, by+2, 10, 3, 0,0,7); octx.fill(); octx.globalAlpha=1;
+  // 树干
+  px(cx-3, by-10, 6, 12, '#7a5230');
+  px(cx-2, by-10, 2, 12, '#916339');
+  px(cx-4, by-1, 8, 3, '#5f3f24');
+  // 树冠（分层圆块）
+  px(cx-10, by-22, 20, 6, '#2f7a3a');
+  px(cx-8, by-26, 16, 5, '#3f9448');
+  px(cx-6, by-29, 12, 4, '#54ad59');
+  px(cx-9, by-24, 6, 4, '#4ea354');
+  px(cx-2, by-28, 6, 4, '#6bc46b');
+  // 高光
+  px(cx-6, by-28, 3, 2, '#8fdc8a');
+  if(S.hitFlash>0){
+    octx.globalAlpha=Math.min(0.7, S.hitFlash*4);
+    octx.fillStyle='#fff'; octx.fillRect(cx-11, by-30, 22, 34);
+    octx.globalAlpha=1;
+  }
+}
+function drawMobHpBar(S, cx, top, w){
+  if(S.hp>=S.maxHp) return;
+  const hx=Math.round(cx-w/2), hy=Math.round(top);
+  octx.fillStyle='rgba(11,15,26,.78)'; octx.fillRect(hx-1, hy-1, w+2, 4);
+  octx.fillStyle='#1c2129'; octx.fillRect(hx, hy, w, 2);
+  const r=Math.max(0, Math.min(1, S.hp/S.maxHp));
+  octx.fillStyle = r>0.5?'#4ade80':(r>0.25?'#f5c542':'#ef4444');
+  octx.fillRect(hx, hy, Math.round(w*r), 2);
 }
 function drawSlime(SLIME){
   const sq=Math.sin(SLIME.wob)*0.10 + (SLIME.atkAnim>0?0.16:0);
