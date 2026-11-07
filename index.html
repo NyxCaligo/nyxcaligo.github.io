@@ -1570,6 +1570,8 @@ function setMap(name){
   }
   WORLD_W=WCOLS*TILE; WORLD_H=WROWS*TILE;
   chunkCache.clear();
+  chunkQueue=[];
+  queueChunksAround(player ? player.x : WORLD_W/2, player ? player.y : WORLD_H/2);
   tilePassCache=null; tileCostCache=null; flowDist=null;
   try{ buildMini(); }catch(e){}
   try{ buildTileCaches(); }catch(e){}
@@ -1652,6 +1654,8 @@ function update(dt){
   updateFootParts(dt);
   updateDmgNums(dt);
   updateFlow();
+  ensureChunksAround(player.x, player.y, 1);
+  pumpChunkQueue();
   updateDeathFx(dt);
   updatePotion(dt);
   updateHeals(dt);
@@ -2287,7 +2291,7 @@ function anyModalOpen(){
         || !document.getElementById('confirmWrap').classList.contains('hidden');
   }catch(e){ return false; }
 }
-const CHUNK=256;
+const CHUNK=384;
 const chunkCache=new Map();
 const probeCv=document.createElement('canvas'); probeCv.width=1; probeCv.height=1;
 const probeCtx=probeCv.getContext('2d');
@@ -2310,6 +2314,39 @@ function validateChunks(cx0,cx1,cy0,cy1){
   const key=keys[chunkCheckIdx];
   const ch=chunkCache.get(key);
   if(ch && !chunkAlive(ch)) chunkCache.delete(key);
+}
+let chunkQueue=[];
+function queueChunksAround(px,py){
+  chunkQueue=[];
+  const cx=Math.floor(px/CHUNK), cy=Math.floor(py/CHUNK);
+  for(let r=0;r<=2;r++){
+    for(let dy=-r;dy<=r;dy++) for(let dx=-r;dx<=r;dx++){
+      if(r>0 && Math.max(Math.abs(dx),Math.abs(dy))!==r) continue;
+      const nx=cx+dx, ny=cy+dy;
+      if(nx<0||ny<0||nx*CHUNK>=WORLD_W||ny*CHUNK>=WORLD_H) continue;
+      chunkQueue.push([nx,ny]);
+    }
+  }
+}
+function ensureChunksAround(px,py,radius){
+  const R=radius==null?1:radius;
+  const cx=Math.floor(px/CHUNK), cy=Math.floor(py/CHUNK);
+  for(let dy=-R;dy<=R;dy++) for(let dx=-R;dx<=R;dx++){
+    const nx=cx+dx, ny=cy+dy;
+    if(nx<0||ny<0||nx*CHUNK>=WORLD_W||ny*CHUNK>=WORLD_H) continue;
+    const key=nx*1000+ny;
+    if(chunkCache.has(key)) continue;
+    if(chunkQueue.some(q=>q[0]===nx&&q[1]===ny)) continue;
+    chunkQueue.push([nx,ny]);
+  }
+}
+function pumpChunkQueue(){
+  let n=0;
+  while(chunkQueue.length && n<2){
+    const [cx,cy]=chunkQueue.shift();
+    try{ buildChunk(cx,cy); }catch(e){}
+    n++;
+  }
 }
 function buildChunk(cx,cy){
   const key=cx*1000+cy;
@@ -2964,17 +3001,17 @@ function initAudio(){
   lp.type='lowpass'; lp.frequency.value=1500; lp.Q.value=0.2; lp.connect(master);
   noteBus=actx.createGain(); noteBus.gain.value=0.5; noteBus.connect(lp);
   const delay=actx.createDelay(1.0); delay.delayTime.value=0.36;
-  const fb=actx.createGain(); fb.gain.value=0.28;
+  const fb=actx.createGain(); fb.gain.value=0.16;
   const wet=actx.createGain(); wet.gain.value=0.22;
   delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(master);
-  const send=actx.createGain(); send.gain.value=0.35;
+  const send=actx.createGain(); send.gain.value=0.20;
   noteBus.connect(send); send.connect(delay);
 }
 function note(freq, t, dur, type, vol, atk, rel){
   const o=actx.createOscillator(), g=actx.createGain();
   o.type=type; o.frequency.value=freq;
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.linearRampToValueAtTime(vol, t+atk);
+  g.gain.linearRampToValueAtTime(vol, t+Math.max(0.02, atk));
   g.gain.exponentialRampToValueAtTime(0.0001, t+dur+rel);
   o.connect(g); g.connect(noteBus);
   o.start(t); o.stop(t+dur+rel+0.05);
@@ -2989,21 +3026,27 @@ const PENTA=[523.25,587.33,659.25,783.99,880.00];
 function perc(kind, t){
   if(!actx) return;
   if(kind==='kick'){
+    // 柔和底鼓：不再做大幅音高下滑（那是"泡泡破裂"声的来源）
     const o=actx.createOscillator(), g=actx.createGain();
+    const lp=actx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=180; lp.Q.value=0.6;
     o.type='sine';
-    o.frequency.setValueAtTime(130, t);
-    o.frequency.exponentialRampToValueAtTime(46, t+0.12);
-    g.gain.setValueAtTime(0.14, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t+0.19);
-    o.connect(g); g.connect(noteBus); o.start(t); o.stop(t+0.22);
+    o.frequency.setValueAtTime(74, t);
+    o.frequency.linearRampToValueAtTime(62, t+0.18);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.075, t+0.012);      // 轻微淡入，去掉咔哒
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.26);
+    o.connect(lp); lp.connect(g); g.connect(noteBus);
+    o.start(t); o.stop(t+0.3);
   } else if(noiseBuf){
+    // 踩镲：更轻、更短，加淡入避免爆音
     const src=actx.createBufferSource(); src.buffer=noiseBuf;
-    const hp=actx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=6200;
+    const hp=actx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=8200;
     const g=actx.createGain();
-    g.gain.setValueAtTime(0.045, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t+0.06);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.022, t+0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t+0.05);
     src.connect(hp); hp.connect(g); g.connect(noteBus);
-    src.start(t); src.stop(t+0.08);
+    src.start(t); src.stop(t+0.07);
   }
 }
 function windSwell(t){
@@ -3031,18 +3074,16 @@ function scheduleBeat(bi, t){
     note(penta[Math.floor(Math.random()*penta.length)], t, beat*1.1, 'triangle', 0.03, 0.15, 0.9);
   }
   if(town){
-    // 鼓点：强拍底鼓 + 弱拍踩镲
-    if(b===0 || b===2) perc('kick', t);
-    if(b===1 || b===3) perc('hat', t);
-    perc('hat', t+beat*0.5);
-    // 每拍琶音（按和弦音上行，轻快）
+    // 只保留很轻的弱拍底鼓，去掉踩镲（高频噪声容易听成"气泡"）
+    if(b===0 && Math.random()<0.7) perc('kick', t);
+    // 每拍琶音：三角波（比方波柔和），音量降低
     const arp=bars[bar].chord;
     const hai=arp[(bi+bar)%arp.length]*2;
-    note(hai, t, beat*0.55, 'square', 0.012, 0.03, 0.5);
-    if(b%2===1) note(hai*1.5, t+beat*0.5, beat*0.4, 'triangle', 0.010, 0.03, 0.4);
+    note(hai, t, beat*0.55, 'triangle', 0.008, 0.05, 0.5);
+    if(b%2===1) note(hai*1.5, t+beat*0.5, beat*0.4, 'sine', 0.007, 0.05, 0.4);
     // 原有旋律加花
-    if(b===0 && Math.random()<0.85) note(penta[Math.floor(Math.random()*penta.length)]*2, t+beat*0.5, beat*0.7, 'square', 0.012, 0.06, 0.7);
-    if(b===1 && Math.random()<0.8) note(penta[Math.floor(Math.random()*penta.length)]*2, t, beat*0.8, 'square', 0.013, 0.06, 0.7);
+    if(b===0 && Math.random()<0.85) note(penta[Math.floor(Math.random()*penta.length)]*2, t+beat*0.5, beat*0.7, 'triangle', 0.010, 0.06, 0.7);
+    if(b===1 && Math.random()<0.8) note(penta[Math.floor(Math.random()*penta.length)]*2, t, beat*0.8, 'triangle', 0.011, 0.06, 0.7);
     if(b===3 && Math.random()<0.6) note(penta[Math.floor(Math.random()*penta.length)]*2, t+beat*0.5, beat*0.6, 'triangle', 0.02, 0.08, 0.7);
   }
   if(musicMood==='town'){
@@ -4075,6 +4116,7 @@ function openMobDetail(key, anchor){
     ['护甲值', String(m.armor)],
     ['攻击伤害', String(m.dmg)],
     ['移动速度', String(m.speed)],
+    ['侦测范围', m.detect? (m.detect+' （半径）') : '—'],
     ['攻击击退', String(m.kb)],
     ['受击退（重量）', String(m.weight)],
     ['掉落', '铜币 '+m.coin.replace(' 铜币','')+' · 经验 '+m.xp]
@@ -4148,7 +4190,9 @@ function bindCatBtns(){
 function ph(n){ const a=[]; for(let i=0;i<n;i++) a.push({n:''}); return a; }
 const MOBS={
   slime:{n:'史莱姆', hp:20, armor:0, dmg:4, xp:8, coin:'1~4 铜币', speed:52, kb:2, weight:1,
-         drops:['铜币','经验球'], desc:'会锁定目标的绿色黏液，靠近后会扑咬。'}
+         detect:220,
+         drops:['铜币','经验球'],
+         desc:'会锁定目标的绿色黏液，靠近后会扑咬。'}
 };
 let seenMobs=new Set();
 const COLLECTION={
@@ -4850,7 +4894,7 @@ document.getElementById('devClose').onclick=()=>document.getElementById('devWrap
 document.getElementById('devBg').onclick=()=>document.getElementById('devWrap').classList.add('hidden');
 document.getElementById('devAll2').onclick=()=>{ for(const id in ITEMS) addItem(id,1); renderBag(); saveGame(); toastMsg('已加入全部物品'); };
 document.getElementById('devClear2').onclick=()=>{ bagItems=[]; renderBag(); saveGame(); toastMsg('背包已清空'); };
-document.getElementById('devSlime2').onclick=()=>{ spawnSlime(3); };
+document.getElementById('devSlime2').onclick=()=>{ spawnSlimeNear(3); };
 document.getElementById('devOneHit').onclick=(e)=>{
   oneHitKill=!oneHitKill;
   e.target.textContent='一刀秒杀：'+(oneHitKill?'开':'关');
@@ -5462,10 +5506,11 @@ function drawAmbient(){
     if(world[ty][tx]===0 && tileWaterCnt[ty*WCOLS+tx]>20){
       const wx0=tx*TILE, wy0=ty*TILE;
       if(wx0+TILE>BRIDGE.x && wx0<BRIDGE.x+BRIDGE.w && wy0+TILE>BRIDGE.y && wy0<BRIDGE.y+BRIDGE.h) continue;
-      const sx=tx*TILE-camX, sy=ty*TILE-camY;
-      const ph=Math.sin(gtime*2+tx*0.7+ty*1.3);
-      px(sx+3+ph*3, sy+5, 3,1,'#4a8fd4');
-      px(sx+9-ph*2, sy+11, 2,1,'#5fa8e6');
+      if(((tx+ty)&1)===0){
+        const sx=tx*TILE-camX, sy=ty*TILE-camY;
+        const ph=Math.sin(gtime*2+tx*0.7+ty*1.3);
+        px(sx+3+ph*3, sy+5, 3,1,'#4a8fd4');
+      }
     }
   }
   for(let i=0;i<14;i++){
@@ -6062,7 +6107,8 @@ let godMode=false, oneHitKill=false;
 function newSlime(x,y){
   return {x, y, hp:20, maxHp:20, dmg:4, r:10, vx:0, vy:0,
           iframe:0, atkCd:1, hitFlash:0, atkAnim:0, wob:Math.random()*6, face:1, armor:0, resist:0,
-          side:Math.random()<0.5?1:-1, stuck:0};
+          side:Math.random()<0.5?1:-1, stuck:0,
+          alert:false, detectR:220, wanderT:0, wanderX:0, wanderY:0};
 }
 let playerIframe=0, playerHurt=0, guardTalked=false;
 let guardQuest=false, questSlimes=[], questCleared=false;
@@ -6180,12 +6226,35 @@ function doRevive(){
   updateHudButtons();
 }
 let orbs=[], chunks=[], splats=[];
+function spawnSlimeNear(n){
+  const cnt=n||1;
+  for(let i=0;i<cnt;i++){
+    const a=Math.random()*Math.PI*2;
+    const r=70+Math.random()*50;                 // 玩家附近 70~120px
+    let sx=player.x+Math.cos(a)*r, sy=player.y+Math.sin(a)*r;
+    let tries=0;
+    while(solidAt(sx,sy) && tries<12){
+      const a2=Math.random()*Math.PI*2;
+      sx=player.x+Math.cos(a2)*r; sy=player.y+Math.sin(a2)*r; tries++;
+    }
+    sx=splayerGuardX(sx); sy=splayerGuardY(sy);
+    const sl=newSlime(sx,sy);
+    sl.alert=true;                                // 就近生成，直接进入警戒
+    sl.wanderT=0;
+    slimes.push(sl);
+  }
+  if(slimes.length){
+    seenMobs.add('slime');
+    toastMsg('在你附近出现了 '+cnt+' 只史莱姆');
+    sfxCrit();
+  }
+}
 function spawnSlime(n){
   const cnt=n||1;
   for(let i=0;i<cnt;i++){
     const sx=OFFICER.x-30+(Math.random()*26-13), sy=OFFICER.y+26+(Math.random()*20-10);
     const sl=newSlime(splayerGuardX(sx), splayerGuardY(sy));
-    if(guardQuest && !questCleared) sl.quest=true;
+    if(guardQuest && !questCleared){ sl.quest=true; sl.alert=true; }   // 试炼怪：无视侦测，直接追
     slimes.push(sl);
   }
   if(slimes.length){
@@ -6508,6 +6577,38 @@ function updateSlime(dt){
     const dx=player.x-s.x, dy=player.y-s.y;
     const dist=Math.hypot(dx,dy)||1;
     s.face = dx>=0?1:-1;
+
+    // ---- 侦测：以自身为圆心（试炼怪不适用） ----
+    if(s.quest){
+      s.alert = true;
+    } else {
+      const DR = s.detectR || 220;
+      if(!s.alert && dist <= DR) s.alert = true;
+      else if(s.alert && dist > DR + 45) s.alert = false;
+    }
+
+    if(!s.alert){
+      // 未发现玩家：随机游荡（不追击、不攻击）
+      s.wanderT -= dt;
+      if(s.wanderT<=0){
+        s.wanderT = 1.2 + Math.random()*2.2;
+        const a = Math.random()*Math.PI*2;
+        const r = 20 + Math.random()*46;
+        s.wanderX = s.x + Math.cos(a)*r;
+        s.wanderY = s.y + Math.sin(a)*r;
+      }
+      const wx=s.wanderX-s.x, wy=s.wanderY-s.y;
+      const wd=Math.hypot(wx,wy)||1;
+      if(wd>4){
+        const ws=52*0.32*dt;                 // 游荡速度约为追击的 1/3
+        const nx2=s.x+wx/wd*ws, ny2=s.y+wy/wd*ws;
+        if(!solidAt(nx2,ny2)){ s.x=nx2; s.y=ny2; }
+        else s.wanderT=0;
+      }
+      s.vx*=Math.pow(0.001,dt); s.vy*=Math.pow(0.001,dt);
+      if(s.atkCd>0) s.atkCd=Math.max(0,s.atkCd-dt);
+      continue;      // 跳过追击与攻击
+    }
     s.x+=s.vx*dt; s.y+=s.vy*dt;
     s.vx*=Math.pow(0.001,dt); s.vy*=Math.pow(0.001,dt);
     const speed=52;
@@ -6673,9 +6774,11 @@ function flowStep(s){
   return best;
 }
 function updateFlow(){
+  // 只有需要追击的地图才计算流场（森林没有追兵，省掉每 1.2 秒一次的大计算）
+  if(mapName!=='town' || !slimes.length){ flowDist=null; return; }
   const tx=Math.floor(player.x/TILE), ty=Math.floor(player.y/TILE);
   const key=ty*WCOLS+tx;
-  if(!flowDist || key!==flowTile || gtime-flowT>1.2){
+  if(!flowDist || key!==flowTile || gtime-flowT>1.8){
     computeFlow(player.x, player.y);
     flowTile=key; flowT=gtime;
   }
