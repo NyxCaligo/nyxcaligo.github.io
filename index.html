@@ -131,6 +131,9 @@
             box-shadow:inset 0 3px 0 #4a7ab5, inset 0 -3px 0 #16283f, 0 4px 0 #0b2545;
             display:flex; align-items:center; justify-content:center; touch-action:none; }
   #atkBtn:active { transform:translateY(2px); box-shadow:inset 0 2px 0 #6b7484, 0 1px 0 rgba(0,0,0,.4); }
+  #atkBtn.cd { filter:grayscale(1) brightness(.55); pointer-events:none; }
+  #atkBtn.cd::after { content:''; position:absolute; inset:0; border-radius:inherit;
+                      background:rgba(8,12,20,.35); }
   #atkBtn.hidden { display:none; }
   #interactBtn { position:fixed; z-index:11; right:calc(8% + 84px); bottom:calc(22% - 12px);
                  width:38px; height:38px; padding:0;
@@ -520,11 +523,20 @@
   <span id="eqLabel">折叠</span>
 </button>
 <button id="atkBtn" class="hidden">
-  <svg width="34" height="34" viewBox="0 0 12 12" shape-rendering="crispEdges">
-    <rect x="7" y="1" width="2" height="1" fill="#f2f6fa"/>
-    <rect x="6" y="2" width="2" height="6" fill="#dfe7ef"/>
-    <rect x="3" y="8" width="8" height="1" fill="#d4b24a"/>
-    <rect x="6" y="9" width="2" height="2" fill="#6b4a2e"/>
+  <svg width="38" height="38" viewBox="0 0 16 16" shape-rendering="crispEdges">
+    <rect x="7" y="0" width="2" height="4" fill="#f2f6fa"/>
+    <rect x="7" y="12" width="2" height="4" fill="#f2f6fa"/>
+    <rect x="0" y="7" width="4" height="2" fill="#f2f6fa"/>
+    <rect x="12" y="7" width="4" height="2" fill="#f2f6fa"/>
+    <rect x="5" y="3" width="1" height="1" fill="#cfe0ee"/>
+    <rect x="10" y="3" width="1" height="1" fill="#cfe0ee"/>
+    <rect x="5" y="12" width="1" height="1" fill="#cfe0ee"/>
+    <rect x="10" y="12" width="1" height="1" fill="#cfe0ee"/>
+    <rect x="3" y="5" width="1" height="1" fill="#cfe0ee"/>
+    <rect x="12" y="5" width="1" height="1" fill="#cfe0ee"/>
+    <rect x="3" y="10" width="1" height="1" fill="#cfe0ee"/>
+    <rect x="12" y="10" width="1" height="1" fill="#cfe0ee"/>
+    <rect x="7" y="7" width="2" height="2" fill="#f5c542"/>
   </svg>
 </button>
 <button id="craftBtn">
@@ -1478,6 +1490,10 @@ function update(dt){
   }
   if(attacking>0) attacking=Math.max(0,attacking-dt);
   if(atkCd>0) atkCd=Math.max(0,atkCd-dt);
+  {
+    const ab=document.getElementById('atkBtn');
+    if(ab) ab.classList.toggle('cd', atkCd>0);
+  }
   updateFootParts(dt);
   updateDmgNums(dt);
   updateFlow();
@@ -4777,7 +4793,7 @@ function bindMulti(){
   if(drop) drop.onclick=()=>{
     if(!multiSel.size){ toastMsg('没有选中物品'); return; }
     for(const ent of [...multiSel]){
-      for(let k=0;k<ent.n;k++) drops.push({ id:ent.id, x:player.x+(Math.random()*30-15), y:player.y+12 });
+      for(let k=0;k<ent.n;k++) drops.push({ id:ent.id, x:player.x+(Math.random()*30-15), y:player.y+12, born:gtime });
     }
     bagItems=bagItems.filter(x=>!multiSel.has(x));
     multiSel.clear(); renderBag(); saveGame();
@@ -5768,7 +5784,7 @@ function killSlime(s){
   // 经验球 + 铜币（爆发）
   for(let i=0;i<2;i++) orbs.push({kind:'xp', x:s.x, y:s.y-6, vx:(Math.random()*2-1)*70, vy:-Math.random()*70-30, life:60, val:4});
   const coinN=1+Math.floor(Math.random()*4);
-  for(let i=0;i<coinN;i++) orbs.push({kind:'coin', x:s.x, y:s.y-6, vx:(Math.random()*2-1)*80, vy:-Math.random()*80-30, life:30, val:1});
+  for(let i=0;i<coinN;i++) orbs.push({kind:'coin', x:s.x, y:s.y-6, vx:(Math.random()*2-1)*80, vy:-Math.random()*80-30, life:60, val:1});
   // 尸块
   for(let i=0;i<5;i++){
     const a=Math.random()*Math.PI*2;
@@ -6242,6 +6258,14 @@ function separateSlimes(){
   }
 }
 function updateOrbs(dt){
+  // 掉落物 60 秒未拾取自动消失
+  if(drops.length){
+    for(let i=drops.length-1;i>=0;i--){
+      const d=drops[i];
+      if(d.born==null) d.born=gtime;
+      if(gtime-d.born>DROP_TTL) drops.splice(i,1);
+    }
+  }
   for(let i=orbs.length-1;i>=0;i--){
     const o=orbs[i];
     o.life-=dt;
@@ -6821,8 +6845,9 @@ function drawFootParts(){
 
 // ---------- 掉落物 ----------
 let drops=[];
+const DROP_TTL=60;
 function spawnDrop(id){
-  drops.push({ id, x:NPC.x+30, y:NPC.y+16 });
+  drops.push({ id, x:NPC.x+30, y:NPC.y+16, born:gtime });
   toastMsg('掉落了：'+ITEMS[id].n);
 }
 function pickupDrop(d){
