@@ -1185,7 +1185,7 @@ cv.addEventListener('mouseup', ()=>{ joy.active=false; joy.dx=joy.dy=0; });
 // ---------- 森林地图 ----------
 const FW=128, FH=128;
 let mapName='town';
-let forestWorld=null, forestRoad=null, forestWater=null, forestMobs=[];
+let forestWorld=null, forestRoad=null, forestWater=null, forestData=null, forestMobs=[];
 let townData=null;
 // ---------- 森林：与主城同一套生成算法，只换数据 ----------
 const FW_ROADS=[
@@ -1270,10 +1270,13 @@ function buildForestWorld(){
   for(let y=0;y<FH;y++) for(let x=0;x<FW;x++){
     if(w[y][x]!==0){ road[y*FW+x]=0; water[y*FW+x]=0; }
   }
-  // 6) 入口小空地
+  // 6) 入口：只切开边界土块，路面计数按掩码重新统计（保留边缘过渡）
   for(let y=ROAD_BASE_Y-2;y<=ROAD_BASE_Y+2;y++) for(let x=2;x<=13;x++){
     if(x<0||y<0||x>=FW||y>=FH) continue;
-    w[y][x]=0; water[y*FW+x]=0; road[y*FW+x]=64;
+    w[y][x]=0; water[y*FW+x]=0;
+    let rc=0;
+    for(let j=0;j<8;j++) for(let i=0;i<8;i++) rc+=roadMask[(y*8+j)*MW+(x*8+i)]?1:0;
+    road[y*FW+x]=rc;
   }
   // 7) 桥面强制可走
   for(let y=ROAD_BASE_Y-2;y<=ROAD_BASE_Y+1;y++){
@@ -1288,7 +1291,7 @@ function buildForestWorld(){
     }
   }
   window.__FOREST_BRIDGE={x0:bX0, x1:bX1, y:ROAD_BASE_Y, hh:2};
-  return {world:w, road, water};
+  return {world:w, road, water, MW, MH, waterMask, roadMask};
 }
 function RIVER_X_AT(py){
   let cx=0, best=1e9;
@@ -1316,11 +1319,13 @@ function setMap(name){
   }
   mapName=name;
   if(name==='forest'){
-    if(!forestWorld){ const f=buildForestWorld(); forestWorld=f.world; forestRoad=f.road; forestWater=f.water; }
+    if(!forestWorld){ const f=buildForestWorld(); forestWorld=f.world; forestRoad=f.road; forestWater=f.water; forestData=f; }
     WCOLS=FW; WROWS=FH;
     world=forestWorld;
     tileRoadCnt=forestRoad;
     tileWaterCnt=forestWater;
+    MW=forestData.MW; MH=forestData.MH;
+    waterMask=forestData.waterMask; roadMask=forestData.roadMask;
     BUILDINGS=[]; PROPS=[];
   } else {
     WCOLS=townData.W; WROWS=townData.H;
