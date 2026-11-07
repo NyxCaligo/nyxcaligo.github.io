@@ -3701,15 +3701,15 @@ const ITEMS={
   woodsword:{n:'木剑', t:'weapon', ic:'woodsword', sub:'近战武器', sell:20,
              desc:'基础的武器。', dmg:5, rate:1.8, crit:4, critMult:CRIT_MULT, kb:1},
   wood:{n:'木头', t:'mat', ic:'wood', desc:'最基础的材料。', sell:2},
-  leaf:{n:'叶子', t:'mat', ic:'leaf', desc:'普通的叶片，带着淡淡的草木味。', sell:1},
-  tome:{n:'书', t:'mat', ic:'tome', desc:'一本厚实的空白书，商店有售。', sell:4},
-  orb:{n:'能量球', t:'mat', ic:'orb', desc:'凝聚着微光的小球，摸起来温热。', sell:6},
-  spellbook:{n:'基础魔法书', t:'mat', ic:'spellbook', desc:'记载着基础魔法的笔记，书页会微微发亮。', sell:12},
-  silk:{n:'蛛丝', t:'mat', ic:'silk', desc:'柔韧的丝线，可以织成很结实的东西。', sell:3},
-  gel:{n:'粘液', t:'mat', ic:'gel', desc:'半透明的绿色胶质，黏糊糊的。', sell:2},
-  gravel:{n:'碎石', t:'mat', ic:'gravel', desc:'敲碎的细小石粒。', sell:1},
+  leaf:{n:'叶子', t:'mat', ic:'leaf', desc:'绿油油的', sell:1},
+  tome:{n:'书', t:'mat', ic:'tome', desc:'这上面写着咒语', sell:4},
+  orb:{n:'能量球', t:'mat', ic:'orb', desc:'蕴含着魔法', sell:6},
+  spellbook:{n:'基础魔法书', t:'mat', ic:'spellbook', desc:'充满了能量', sell:12},
+  silk:{n:'蛛丝', t:'mat', ic:'silk', desc:'韧性很好', sell:3},
+  gel:{n:'粘液', t:'mat', ic:'gel', desc:'黏糊糊的', sell:2},
+  gravel:{n:'碎石', t:'mat', ic:'gravel', desc:'它比木头更坚硬', sell:1},
   slimestaff:{n:'史莱姆法杖', t:'weapon', ic:'slimestaff', sub:'魔法武器',
-              desc:'木柄上顶着一团翠绿的胶体，会跟着呼吸一样轻轻晃动。',
+              desc:'让史莱姆为你而战',
               dmg:4, rate:1.6, crit:3, kb:1, magic:5, sell:60},
   potion:{n:'治疗药剂', t:'cons', ic:'potion', sub:'消耗品', sell:3, heal:10, cd:1.5, price:7,
           desc:'闻起来有股清甜。'},
@@ -3719,6 +3719,8 @@ const ITEMS={
 };
 const SETS={ wood:{n:'木制套装', parts:3, bonus:2} };
 const RECIPES=[
+  {out:'spellbook', need:{orb:20, tome:1}},
+  {out:'slimestaff', need:{gel:10, orb:10, wood:10}},
   {out:'woodchest', need:{wood:20}},
   {out:'woodlegs', need:{wood:16}},
   {out:'woodhelm', need:{wood:12}}
@@ -4356,26 +4358,26 @@ function ph(n){ const a=[]; for(let i=0;i<n;i++) a.push({n:''}); return a; }
 const MOBS={
   slime:{n:'史莱姆', hp:20, armor:0, dmg:4, xp:8, coin:'1~4 铜币', coinMin:1, coinMax:4, speed:58, kb:2, weight:1,
          detect:220,
-         drops:['铜币','经验球'],
+         loot:[{id:'gel', p:0.35, n:1}, {id:'orb', p:0.15, n:1}],
          desc:'会锁定目标的绿色黏液，靠近后会扑咬。'},
   spider:{n:'蜘蛛', hp:25, armor:0, dmg:6, xp:12, coin:'3~6 铜币', coinMin:3, coinMax:6, speed:68, kb:2, weight:0.5,
          detect:170,
-         drops:['铜币','经验球'],
+         loot:[{id:'silk', p:0.50, n:1}],
          desc:'这也太吓人了'},
   caterpillar:{n:'大毛毛虫', hp:35, armor:2, dmg:5, xp:10, coin:'2~5 铜币', coinMin:2, coinMax:5, speed:30, speedNote:'（激怒后 45）', kb:1, weight:2,
          detect:150, neutral:true,
-         drops:['铜币','经验球'],
+         loot:[{id:'leaf', p:0.50, n:1}, {id:'orb', p:0.35, n:1}],
          desc:'蠕动 蠕动 蠕动'},
   larva:{n:'毛毛虫幼崽', hp:15, armor:0, dmg:0, xp:4, coin:'1~2 铜币', coinMin:1, coinMax:2,
          speed:18, kb:1, weight:0.5, friendly:true, detect:0,
-         drops:['木头'],
+         loot:[{id:'leaf', p:0.75, n:1}, {id:'orb', p:0.60, n:1}],
          desc:'这是第一种友好生物，只会慢慢移动。'},
   rock:{n:'岩石', hp:40, armor:2, dmg:0, xp:0, coin:'—', coinMin:0, coinMax:0, speed:0, kb:0, weight:99,
          static:true, block:true, harvest:true,
-         drops:['gravel'], desc:'它很坚硬'},
+         loot:[{id:'gravel', p:1, min:1, max:3}], desc:'它很坚硬'},
   tree:{n:'树', hp:30, armor:0, dmg:0, xp:0, coin:'—', coinMin:0, coinMax:0, speed:0, kb:0, weight:99,
          static:true, block:true, harvest:true,
-         drops:['木头'], desc:'普通的树'}
+         loot:[{id:'wood', p:1, min:1, max:3}], desc:'普通的树'}
 };
 let seenMobs=new Set();
 const COLLECTION={
@@ -6539,11 +6541,17 @@ function killSlime(s){
     const coinN=cmin+Math.floor(Math.random()*(cmax-cmin+1));
     for(let i=0;i<coinN;i++) orbs.push({kind:'coin', x:s.x, y:s.y-6, vx:(Math.random()*2-1)*80, vy:-Math.random()*80-30, life:60, val:1});
   }
-  // 采集类（树/岩石）：直接给材料
-  if(mob.harvest && mob.drops && mob.drops.length){
-    for(const id of mob.drops){
-      if(ITEMS[id]) { addItem(id, 1+Math.floor(Math.random()*2)); toastMsg('获得 '+ITEMS[id].n); }
+  // 材料掉落（每个条目独立判定）
+  if(mob.loot){
+    const got=[];
+    for(const L of mob.loot){
+      if(Math.random() > (L.p==null?1:L.p)) continue;
+      const n = (L.min!=null) ? (L.min + Math.floor(Math.random()*(L.max-L.min+1))) : (L.n||1);
+      if(!ITEMS[L.id] || n<=0) continue;
+      addItem(L.id, n);
+      got.push(ITEMS[L.id].n + (n>1?('×'+n):''));
     }
+    if(got.length) toastMsg('获得 ' + got.join('、'));
   }
   // 死亡粒子：每个物种专属
   const kind=s.kind||'slime';
@@ -7316,6 +7324,22 @@ function buildShopGrid(){
     pr.textContent='7铜';
     d.appendChild(pr);
     d.onclick=()=>{ openBuyPopup('potion', 7, d); };
+    g.appendChild(d);
+  }
+  // 第二格：书（35 铜）
+  {
+    const d=document.createElement('div');
+    d.className='shop-slot';
+    d.style.cssText='position:relative;cursor:pointer';
+    const cv=document.createElement('img');
+    cv.src=ITEM_ICONS.tome;
+    cv.style.cssText='width:30px;height:30px;image-rendering:pixelated;';
+    d.appendChild(cv);
+    const pr=document.createElement('span');
+    pr.style.cssText='position:absolute;right:1px;bottom:0;font-size:8px;color:#fde68a;background:rgba(11,15,26,.8);padding:0 2px';
+    pr.textContent='35铜';
+    d.appendChild(pr);
+    d.onclick=()=>{ openBuyPopup('tome', 35, d); };
     g.appendChild(d);
   }
   for(let i=1;i<24;i++){
