@@ -253,7 +253,20 @@
              display:flex; align-items:center; justify-content:center;
              background:linear-gradient(180deg,#2b4a72,#1c3350); border:2px solid #0b2545; border-radius:0;
              box-shadow:inset 0 2px 0 #4a7ab5, 0 3px 0 #0b2545, 0 0 14px rgba(59,130,246,.4); }
-  #quadItems { position:absolute; left:5px; bottom:64px; display:flex; flex-direction:column-reverse; gap:6px; }
+  #quadItems { position:absolute; left:5px; bottom:64px; display:flex; flex-direction:column-reverse; gap:6px;
+               transform-origin:50% calc(100% + 34px); }
+  #quadItems.pop > button { animation:quadPop .26s cubic-bezier(.16,1.25,.35,1) both; }
+  #quadItems.pop > button:nth-child(1){ animation-delay:0ms }
+  #quadItems.pop > button:nth-child(2){ animation-delay:45ms }
+  #quadItems.pop > button:nth-child(3){ animation-delay:90ms }
+  #quadItems.pop > button:nth-child(4){ animation-delay:135ms }
+  @keyframes quadPop {
+    0%   { opacity:0; transform:translateY(18px) scale(.55); }
+    60%  { opacity:1; transform:translateY(-2px) scale(1.06); }
+    100% { opacity:1; transform:translateY(0) scale(1); }
+  }
+  #quadBtn.spin { animation:quadBtnSpin .34s cubic-bezier(.16,1.2,.4,1); }
+  @keyframes quadBtnSpin { 0%{transform:rotate(0) scale(1)} 50%{transform:rotate(90deg) scale(1.08)} 100%{transform:rotate(0) scale(1)} }
   #quadItems button { width:46px; height:46px; padding:0; display:flex; align-items:center; justify-content:center;
                       background:linear-gradient(180deg,#2b4a72,#1c3350); border:2px solid #0b2545; border-radius:0;
                       box-shadow:inset 0 1px 0 #4a7ab5, 0 3px 0 #0b2545;
@@ -694,7 +707,7 @@
     <button id="devClose" class="sp-full">关闭</button>
   </div>
 </div>
-<div id="confirmWrap" class="modal hidden" style="z-index:15; align-items:flex-start; padding-top:9vh;">
+<div id="confirmWrap" class="modal hidden" style="z-index:15; align-items:center; padding-top:16vh;">
   <div class="modal-bg" id="confirmBg"></div>
   <div class="modal-box" style="width:min(260px,72vw); padding:14px; gap:10px">
     <div class="eq-title" id="confirmMsg" style="font-size:15px; line-height:1.5"></div>
@@ -2120,7 +2133,7 @@ function drawHero(){
 
 function drawHUD(){
   drawIcon(IC.heart, 4, 4, '#f43f5e');
-  drawBar(11, 4, 64, 7, player.hp/player.maxHp, '#fb7185');
+  drawBar(11, 5, 64, 5, player.hp/player.maxHp, '#fb7185');
   {
     const s1=String(Math.max(0,Math.ceil(player.hp))), s2=String(Math.round(player.maxHp));
     drawText(s1, 78, 5, '#f8fafc', 1);
@@ -2132,7 +2145,7 @@ function drawHUD(){
   px(3, 16, 5, 2, '#3b82f6');
   px(4, 18, 3, 2, '#3b82f6');
   px(4, 20, 2, 1, '#2563eb');
-  drawBar(11, 16, 64, 7, (player.mp||0)/(player.maxMp||1), '#3b82f6');
+  drawBar(11, 17, 64, 5, (player.mp||0)/(player.maxMp||1), '#3b82f6');
   {
     const s1=String(Math.floor(player.mp||0)), s2=String(Math.round(player.maxMp||30));
     drawText(s1, 78, 17, '#bfdbfe', 1);
@@ -2141,7 +2154,7 @@ function drawHUD(){
   }
   drawText('LV', 4, 27, '#a5b4fc');
   drawText(String(level), 13, 27, '#f8fafc');
-  drawBar(26, 28, 49, 4, xp/xpNeed, '#38bdf8');
+  drawBar(26, 28, 49, 3, xp/xpNeed, '#38bdf8');
   {
     const s1=String(Math.max(0,Math.floor(xp)));
     const s2=String(Math.max(0,Math.ceil(xpNeed-xp)));
@@ -4245,7 +4258,21 @@ let quadOpen=false, quadTimer=null;
 function setQuad(open){
   quadOpen=!!open;
   const it=document.getElementById('quadItems');
-  if(it) it.classList.toggle('open', quadOpen);
+  if(it){
+    it.classList.toggle('open', quadOpen);
+    if(quadOpen){
+      // 重新触发动画：先移除再强制回流
+      it.classList.remove('pop');
+      void it.offsetWidth;
+      it.classList.add('pop');
+    } else {
+      it.classList.remove('pop');
+    }
+  }
+  const qb1=document.getElementById('quadBtn');
+  if(qb1 && quadOpen){
+    qb1.classList.remove('spin'); void qb1.offsetWidth; qb1.classList.add('spin');
+  }
   clearTimeout(quadTimer);
   if(quadOpen){
     const qb=document.getElementById('quadBtn');
