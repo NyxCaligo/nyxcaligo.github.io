@@ -6652,9 +6652,11 @@ function updateSlime(dt){
     return;
   }
   for(const s of slimes){
-    // 静态物体（树/岩石）：不移动、不攻击
+    // 静态物体（树/岩石）：不移动、不攻击，但受击无敌帧必须正常递减
     if(s.static){
       if(s.hitFlash>0) s.hitFlash=Math.max(0,s.hitFlash-dt);
+      if(s.iframe>0) s.iframe=Math.max(0,s.iframe-dt);
+      if(s.atkAnim>0) s.atkAnim=Math.max(0,s.atkAnim-dt);
       continue;
     }
     // 自愈：万一卡在障碍里，挤到最近的可走位置
