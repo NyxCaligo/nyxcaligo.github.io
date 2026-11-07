@@ -1266,6 +1266,7 @@ cv.addEventListener('mouseup', ()=>{ joy.active=false; joy.dx=joy.dy=0; });
 const FW=128, FH=128;
 let mapName='town';
 let forestWorld=null, forestRoad=null, forestWater=null, forestData=null, forestMobs=[];
+let forestObstacles=[];
 let townData=null;
 // ---------- 森林：与主城同一套生成算法，只换数据 ----------
 const FW_ROADS=[
@@ -1371,7 +1372,55 @@ function buildForestWorld(){
     }
   }
   window.__FOREST_BRIDGE={x0:bX0, x1:bX1, y:ROAD_BASE_Y, hh:2};
-  return {world:w, road, water, MW, MH, waterMask, roadMask};
+
+  // ---- 随机障碍物：圆角长条（倒木/岩石），不排成方块 ----
+  const obstacles=[];
+  const isFree=(px,py)=>{
+    const tx=Math.floor(px/TILE), ty=Math.floor(py/TILE);
+    if(tx<1||ty<1||tx>=FW-1||ty>=FH-1) return false;
+    if(w[ty][tx]!==0) return false;
+    if(water[ty*FW+tx]>8) return false;
+    if(Math.abs(py-ROAD_BASE_Y*TILE)<70) return false;          // 主路留空
+    if(Math.abs(px-(bX0+bX1)/2*TILE)<160 && Math.abs(py-ROAD_BASE_Y*TILE)<140) return false; // 桥头留空
+    return true;
+  };
+  const rndAt=(i,k)=>hash(i*17+k*31+7, i*13+k*7+3);
+  const segGap=(a,b)=>{          // 两条线段的最小距离（采样近似）
+    let md=1e9;
+    for(let i=0;i<=6;i++){
+      const x=a.x1+(a.x2-a.x1)*i/6, y=a.y1+(a.y2-a.y1)*i/6;
+      const d=segDist(x,y,b.x1,b.y1,b.x2,b.y2);
+      if(d<md) md=d;
+    }
+    return md;
+  };
+  for(let i=0;i<900;i++){
+    if(obstacles.length>=100) break;
+    const bx=100+rndAt(i,1)*(WORLD_W-200);
+    const by=100+rndAt(i,2)*(WORLD_H-200);
+    const ang=rndAt(i,3)*Math.PI*2;
+    const len=34+rndAt(i,4)*90;
+    const wid=9+Math.floor(rndAt(i,5)*7);
+    const x1=bx-Math.cos(ang)*len/2, y1=by-Math.sin(ang)*len/2;
+    const x2=bx+Math.cos(ang)*len/2, y2=by+Math.sin(ang)*len/2;
+    // 两端和中间都必须是空地
+    let ok=true;
+    for(let t=0;t<=6;t++){
+      const px=x1+(x2-x1)*t/6, py=y1+(y2-y1)*t/6;
+      if(!isFree(px,py)){ ok=false; break; }
+    }
+    if(!ok) continue;
+    // 与已有障碍保持距离（线段到线段）
+    const cand={x1,y1,x2,y2};
+    let far=true;
+    for(const o of obstacles){
+      if(segGap(cand,o) < (wid+o.w)/2 + 9){ far=false; break; }
+    }
+    if(!far) continue;
+    obstacles.push({x1,y1,x2,y2,w:wid,seed:i});
+  }
+  window.__FOREST_OBS=obstacles;
+  return {world:w, road, water, MW, MH, waterMask, roadMask, obstacles};
 }
 function RIVER_X_AT(py){
   let cx=0, best=1e9;
@@ -1387,6 +1436,14 @@ function forestSolid(x,y){
   const tx=Math.floor(x/TILE), ty=Math.floor(y/TILE);
   if(tx<0||ty<0||tx>=FW||ty>=FH) return true;
   if(forestWater[ty*FW+tx]>8) return true;
+  // 障碍物（倒木/岩石）
+  if(forestObstacles && forestObstacles.length){
+    for(let i=0;i<forestObstacles.length;i++){
+      const o=forestObstacles[i];
+      if(Math.abs(o.x1-x)>220 && Math.abs(o.x2-x)>220) continue;
+      if(segDist(x,y,o.x1,o.y1,o.x2,o.y2) < o.w/2+4) return true;
+    }
+  }
   if(forestRoad[ty*FW+tx]>0) return false;
   if(forestWorld[ty][tx]!==0) return true;
   return false;
@@ -1400,6 +1457,7 @@ function setMap(name){
   mapName=name;
   if(name==='forest'){
     if(!forestWorld){ const f=buildForestWorld(); forestWorld=f.world; forestRoad=f.road; forestWater=f.water; forestData=f; }
+    forestObstacles=(forestData&&forestData.obstacles)||[];
     WCOLS=FW; WROWS=FH;
     world=forestWorld;
     tileRoadCnt=forestRoad;
@@ -2188,6 +2246,15 @@ function buildChunk(cx,cy){
           else drawBoundaryBase(sx,sy,tx,ty);
         }
       }
+      // 森林障碍物（倒木/岩石）
+      if(mapName==='forest' && forestObstacles && forestObstacles.length){
+        for(const o of forestObstacles){
+          const minX=Math.min(o.x1,o.x2)-16, maxX=Math.max(o.x1,o.x2)+16;
+          const minY=Math.min(o.y1,o.y2)-16, maxY=Math.max(o.y1,o.y2)+16;
+          if(maxX<x0 || minX>x0+CHUNK || maxY<y0 || minY>y0+CHUNK) continue;
+          drawForestObstacle(o, x0, y0);
+        }
+      }
       octx=saved;
       rec={cv,x0,y0};
     }
@@ -2243,6 +2310,41 @@ function drawForestBush(sx,sy,tx,ty){
   octx.fillStyle='#24552e'; octx.fillRect(sx+2,sy+11,12,2);
   octx.fillStyle='#57a066'; octx.fillRect(sx+9,sy+5,2,2);
 }
+function drawForestObstacle(o, ox0, oy0){
+  const x1=o.x1-ox0, y1=o.y1-oy0, x2=o.x2-ox0, y2=o.y2-oy0;
+  const len=Math.hypot(x2-x1,y2-y1);
+  const steps=Math.max(2, Math.round(len/3));
+  const h=o.seed||0;
+  // 影子
+  for(let i=0;i<=steps;i++){
+    const t=i/steps, x=Math.round(x1+(x2-x1)*t), y=Math.round(y1+(y2-y1)*t);
+    octx.fillStyle='rgba(10,30,16,.28)';
+    octx.fillRect(x-Math.round(o.w/2), y-Math.round(o.w/2)+5, o.w, o.w);
+  }
+  // 主体（深浅交错，木头质感）
+  for(let i=0;i<=steps;i++){
+    const t=i/steps, x=Math.round(x1+(x2-x1)*t), y=Math.round(y1+(y2-y1)*t);
+    const band=(Math.floor(i/2)+h)%3;
+    octx.fillStyle = band===0?'#6b4a2e' : band===1?'#7d5936' : '#5c3f27';
+    octx.fillRect(x-Math.round(o.w/2), y-Math.round(o.w/2), o.w, o.w);
+  }
+  // 顶部高光 + 底部阴影（让它是"横躺的木头"）
+  for(let i=0;i<=steps;i++){
+    const t=i/steps, x=Math.round(x1+(x2-x1)*t), y=Math.round(y1+(y2-y1)*t);
+    octx.fillStyle='#9c7448';
+    octx.fillRect(x-Math.round(o.w/2)+1, y-Math.round(o.w/2), Math.max(2,o.w-2), 1);
+    octx.fillStyle='#432c19';
+    octx.fillRect(x-Math.round(o.w/2), y+Math.round(o.w/2)-1, o.w, 1);
+  }
+  // 两端年轮
+  for(const [ex,ey] of [[x1,y1],[x2,y2]]){
+    octx.fillStyle='#a8834f';
+    octx.fillRect(Math.round(ex)-Math.round(o.w/2), Math.round(ey)-Math.round(o.w/2), o.w, o.w);
+    octx.fillStyle='#6b4a2e';
+    octx.fillRect(Math.round(ex)-Math.round(o.w/2)+2, Math.round(ey)-Math.round(o.w/2)+2, Math.max(2,o.w-4), Math.max(2,o.w-4));
+  }
+}
+
 function drawForestWall(sx,sy,tx,ty){
   // 棕褐色土块墙：四面都可能长草（朝向草地的一侧随机生成）
   const h=hash(tx*3+5,ty*9+1), h2=hash(tx*7+2,ty*11+6);
