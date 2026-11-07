@@ -4229,17 +4229,17 @@ const MOBS={
   spider:{n:'蜘蛛', hp:25, armor:0, dmg:6, xp:12, coin:'3~6 铜币', coinMin:3, coinMax:6, speed:68, kb:2, weight:0.5,
          detect:170,
          drops:['铜币','经验球'],
-         desc:'林间猎手。速度极快，但视野不宽，贴脸才发现你。'},
+         desc:'这也太吓人了'},
   caterpillar:{n:'大毛毛虫', hp:35, armor:2, dmg:5, xp:10, coin:'2~5 铜币', coinMin:2, coinMax:5, speed:30, kb:1, weight:2,
          detect:150, neutral:true,
          drops:['铜币','经验球'],
-         desc:'温和的巨型幼虫，平时慢慢爬。被攻击后会发怒反击。'},
+         desc:'蠕动 蠕动 蠕动'},
   rock:{n:'岩石', hp:40, armor:2, dmg:0, xp:0, coin:'—', coinMin:0, coinMax:0, speed:0, kb:0, weight:99,
          static:true, block:true, harvest:true,
-         drops:['石头'], desc:'可以敲碎的石头，里面也许有东西。'},
+         drops:['石头'], desc:'它很坚硬'},
   tree:{n:'树', hp:30, armor:0, dmg:0, xp:0, coin:'—', coinMin:0, coinMax:0, speed:0, kb:0, weight:99,
          static:true, block:true, harvest:true,
-         drops:['木头'], desc:'普通的树。砍倒可以得到木头。'}
+         drops:['木头'], desc:'普通的树'}
 };
 let seenMobs=new Set();
 const COLLECTION={
@@ -6135,7 +6135,7 @@ function doAttack(){
     for(const h of hits){        // 无限穿透：范围内全部命中
       const crit2=Math.random()*100<(it2.crit||4);
       let dmg2=Math.max(1, Math.round((it2.dmg||5)*(crit2?(it2.critMult||1.7):1)));
-      if(oneHitKill) dmg2=Math.max(dmg2, h.sl.hp);
+      if(oneHitKill) dmg2=Math.max(dmg2, h.sl.hp + 999);
       dmg2=calcDamage(dmg2, h.sl.armor||0, h.sl.resist||0, 'physical');
       hitSlime(h.sl, dmg2, crit2, wkb);
     }
@@ -6401,17 +6401,26 @@ function killSlime(s){
       if(ITEMS[id]) { addItem(id, 1+Math.floor(Math.random()*2)); toastMsg('获得 '+ITEMS[id].n); }
     }
   }
-  // 尸块
-  for(let i=0;i<5;i++){
+  // 死亡粒子：每个物种专属
+  const kind=s.kind||'slime';
+  const FX={
+    slime:      {cols:['#7ed957','#5cc23a','#9df07a'], n:5, splat:8, splatCol:'#6bcf4a'},
+    spider:     {cols:['#8a4433','#5a2a1f','#3a2a35','#7a4a6b'], n:7, splat:0},
+    caterpillar:{cols:['#7ec850','#a8e87a','#6b4a7a','#5da33a'], n:7, splat:3, splatCol:'#8ed85c'},
+    tree:       {cols:['#7a5230','#916339','#3f9448','#2f7a3a'], n:8, splat:0},
+    rock:       {cols:['#9aa5b1','#7b8592','#5b6470','#b0bbc7'], n:8, splat:0},
+  }[kind] || {cols:['#7ed957','#5cc23a','#9df07a'], n:5, splat:8, splatCol:'#6bcf4a'};
+
+  for(let i=0;i<FX.n;i++){
     const a=Math.random()*Math.PI*2;
-    chunks.push({x:s.x, y:s.y-8, vx:Math.cos(a)*70, vy:-Math.random()*80-20,
-                 life:3+Math.random()*2, size:2+Math.floor(Math.random()*2),
-                 col:['#7ed957','#5cc23a','#9df07a'][i%3]});
+    chunks.push({x:s.x, y:s.y-8, vx:Math.cos(a)*(kind==='rock'?55:70), vy:-Math.random()*(kind==='tree'?60:80)-20,
+                 life:2.5+Math.random()*2, size:(kind==='rock'||kind==='tree')?2+Math.floor(Math.random()*3):2+Math.floor(Math.random()*2),
+                 col:FX.cols[i%FX.cols.length]});
   }
-  // 粘液飞溅（落地消失）
-  for(let i=0;i<8;i++){
+  for(let i=0;i<FX.splat;i++){
     const a=Math.random()*Math.PI*2;
-    splats.push({x:s.x, y:s.y-8, vx:Math.cos(a)*60, vy:-Math.random()*60-20, life:1.2, dead:false});
+    splats.push({x:s.x, y:s.y-8, vx:Math.cos(a)*60, vy:-Math.random()*60-20, life:1.2, dead:false,
+                 col:FX.splatCol||'#6bcf4a'});
   }
   sfxHit();
 }
@@ -7508,12 +7517,13 @@ function drawOrbs(){
     octx.globalAlpha=1;
   }
   for(const p2 of splats){
+    const sc=p2.col||'#6bcf4a';
     if(p2.dead){
       octx.globalAlpha=Math.max(0, p2.deadT/0.5)*0.8;
-      px(p2.x-camX-1, p2.y-camY, 3, 2, '#6bcf4a');
+      px(p2.x-camX-1, p2.y-camY, 3, 2, sc);
       octx.globalAlpha=1;
     } else {
-      px(p2.x-camX-1, p2.y-camY-1, 2, 2, '#8ee06a');
+      px(p2.x-camX-1, p2.y-camY-1, 2, 2, sc);
     }
   }
 }
