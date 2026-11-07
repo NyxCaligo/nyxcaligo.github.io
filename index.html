@@ -4099,10 +4099,10 @@ function renderEquipPanel(){
         {label:'查看', fn:()=>openItemDetail(cur)},
         {label:'卸下', fn:()=>{ vibrate(3); sfxEquip(); unequip(t,i); renderEquipPanel(); renderBag(); saveGame(); }}
       ], d);
-      bindItemSlot(d, menu, menu);          // 点击/长按都出菜单，不再直接弹详情
+      bindItemSlot(d, ()=>{}, menu);        // 单击不弹任何界面，长按才出菜单
     }
     else {
-      d.onclick=()=>{ sfxBeep(); vibrate(2); toastMsg('从背包里选择要装备的'+({weapon:'武器',armor:'防具',acc:'饰品'}[t]||'装备')); };
+      d.onclick=()=>{ sfxBeep(); };          // 空槽：静默
     }
     return d;
   };
