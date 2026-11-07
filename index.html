@@ -1278,7 +1278,7 @@ function handleTap(vx,vy){
     if(vx>=El.wx-4 && vx<=El.wx+El.GW+4 && vy>=El.wy && vy<=El.wy+El.GH){
       const rel=(vx-El.wx-El.pad)/(El.WS+4);
       const idx=Math.max(0,Math.min(2,Math.round(rel)));
-      if(EQUIP.weapons[idx]){ heldSlot=idx; sfxBeep(); vibrate(2); updateHudButtons(); }
+      if(EQUIP.weapons[idx]){ heldSlot=idx; syncAtkCd(); sfxBeep(); vibrate(2); updateHudButtons(); }
       return;
     }
     const H=El.hudBox;
@@ -1657,7 +1657,8 @@ function update(dt){
     lastStep = -1;
   }
   if(attacking>0) attacking=Math.max(0,attacking-dt);
-  if(atkCd>0) atkCd=Math.max(0,atkCd-dt);
+  for(let i=0;i<atkCdSlots.length;i++){ if(atkCdSlots[i]>0) atkCdSlots[i]=Math.max(0,atkCdSlots[i]-dt); }
+  syncAtkCd();
   {
     const ab=document.getElementById('atkBtn');
     if(ab) ab.classList.toggle('cd', atkCd>0);
@@ -6138,6 +6139,8 @@ document.getElementById('dlgBox').onclick=()=>{
 // ---------- 攻击 ----------
 const ATK_DUR=0.34;
 let attacking=0, heldSlot=0, atkCd=0;
+let atkCdSlots=[0,0,0];            // 每个武器槽独立的冷却
+function syncAtkCd(){ atkCd = atkCdSlots[heldSlot]||0; }
 function sfxXp(){
   if(!actx||!sfxOn||mutedAll) return;
   const t=actx.currentTime;
@@ -6222,7 +6225,8 @@ function doAttack(){
     if(Math.abs(adx)>2){ player.face = adx>0?1:-1; }
   }
   attacking=ATK_DUR;
-  atkCd=(ITEMS[wid].rate||1.8);
+  atkCdSlots[heldSlot]=(ITEMS[wid].rate||1.8);
+  atkCd=atkCdSlots[heldSlot];
   sfxSwing(); vibrate(2);
   {
     const dx=DUMMY.x-player.x, dy=DUMMY.y-player.y;
@@ -7187,7 +7191,7 @@ function enterShop(){
   townPos={x:player.x, y:player.y};
   inShop=true;
   player.x=ROOM.w/2; player.y=ROOM.h-24; player.face=1;
-  attacking=0; atkCd=0;
+  attacking=0; atkCd=0; atkCdSlots=[0,0,0];
   try{ closeBag();
        document.getElementById('craftWrap').classList.add('hidden');
        document.getElementById('colWrap').classList.add('hidden');
@@ -7225,7 +7229,8 @@ function updateShop(dt){
     if(mvx>0) player.face=1; else if(mvx<0) player.face=-1;
   } else { walkPhase=0; lastStep=-1; }
   if(attacking>0) attacking=Math.max(0,attacking-dt);
-  if(atkCd>0) atkCd=Math.max(0,atkCd-dt);
+  for(let i=0;i<atkCdSlots.length;i++){ if(atkCdSlots[i]>0) atkCdSlots[i]=Math.max(0,atkCdSlots[i]-dt); }
+  syncAtkCd();
   if(player.maxMp) player.mp=Math.min(player.maxMp,(player.mp||0)+dt*0.25);
   centerRoomCam();
   let best=null;
