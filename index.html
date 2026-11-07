@@ -4148,7 +4148,7 @@ function openMobDetail(key, anchor){
     ['生命值', String(m.hp)],
     ['护甲值', String(m.armor)],
     ['攻击伤害', String(m.dmg)],
-    ['移动速度', String(m.speed)],
+    ['移动速度', String(m.speed) + (m.speedNote||'')],
     ['侦测范围', m.detect? (m.detect+' （半径）') : '—'],
     ['攻击击退', String(m.kb)],
     ['受击退（重量）', String(m.weight)],
@@ -4230,7 +4230,7 @@ const MOBS={
          detect:170,
          drops:['铜币','经验球'],
          desc:'这也太吓人了'},
-  caterpillar:{n:'大毛毛虫', hp:35, armor:2, dmg:5, xp:10, coin:'2~5 铜币', coinMin:2, coinMax:5, speed:30, kb:1, weight:2,
+  caterpillar:{n:'大毛毛虫', hp:35, armor:2, dmg:5, xp:10, coin:'2~5 铜币', coinMin:2, coinMax:5, speed:30, speedNote:'（激怒后 45）', kb:1, weight:2,
          detect:150, neutral:true,
          drops:['铜币','经验球'],
          desc:'蠕动 蠕动 蠕动'},
@@ -6362,8 +6362,8 @@ function playerArmorTotal(){
   return a;
 }
 function knockbackForce(kb, weight){
-  const k=Math.max(0, kb||0), w=Math.max(1, weight||1);
-  return Math.min(180, 80*k/(k+w));
+  const k=Math.max(0, kb||0), w=Math.max(0.2, weight||1);
+  return Math.min(320, 200*k/(k+w));     // 轻的怪吃更多击退
 }
 function hitSlime(s, dmg, crit, kb){
   if(s.neutral){ s.angry=true; s.angryT=10; s.alert=true; }
@@ -6372,9 +6372,11 @@ function hitSlime(s, dmg, crit, kb){
   s.hp-=dmg;
   addDmgNum(s.x, s.y-18, dmg, crit);
   spawnHitSpark(s.x, s.y-8);
+  const mobDef=MOBS[s.kind||'slime']||MOBS.slime;
   const dx=s.x-player.x, dy=s.y-player.y, d=Math.hypot(dx,dy)||1;
-  const force=knockbackForce(kb!=null?kb:1, 1);
+  const force=knockbackForce(kb!=null?kb:1, mobDef.weight||1);
   s.vx=dx/d*force; s.vy=dy/d*force;
+  s.stun=Math.max(s.stun||0, 0.22);      // 硬直：这段时间不主动移动
   if(s.hp<=0) killSlime(s);
 }
 function killSlime(s){
@@ -6681,6 +6683,7 @@ function updateSlime(dt){
     if(s.hitFlash>0) s.hitFlash=Math.max(0,s.hitFlash-dt);
     if(s.atkAnim>0) s.atkAnim=Math.max(0,s.atkAnim-dt);
     s.wob+=dt*7;
+    if(s.stun>0) s.stun=Math.max(0, s.stun-dt);
     const dx=player.x-s.x, dy=player.y-s.y;
     const dist=Math.hypot(dx,dy)||1;
 
@@ -6726,8 +6729,8 @@ function updateSlime(dt){
     s.x+=s.vx*dt; s.y+=s.vy*dt;
     s.vx*=Math.pow(0.001,dt); s.vy*=Math.pow(0.001,dt);
     const speed = s.angry ? 45 : (s.speed || 52);
-    s.face = dx>=0?1:-1;                     // 追击时才朝玩家
-    if(dist>14){
+    if(dist>14 && s.stun<=0){                // 硬直中不主动移动，只吃击退惯性
+      s.face = dx>=0?1:-1;
       const dxn=dx/dist, dyn=dy/dist;
       const step=speed*dt;
       const clear=lineClear(s.x, s.y, player.x, player.y);
@@ -7416,23 +7419,38 @@ function drawRock(S){
 }
 function drawTreeMob(S){
   const cx=S.x-camX, by=S.y-camY;
-  octx.globalAlpha=0.24; octx.fillStyle='#000';
-  octx.beginPath(); octx.ellipse(cx, by+2, 10, 3, 0,0,7); octx.fill(); octx.globalAlpha=1;
-  // 树干
-  px(cx-3, by-10, 6, 12, '#7a5230');
-  px(cx-2, by-10, 2, 12, '#916339');
-  px(cx-4, by-1, 8, 3, '#5f3f24');
-  // 树冠（分层圆块）
-  px(cx-10, by-22, 20, 6, '#2f7a3a');
-  px(cx-8, by-26, 16, 5, '#3f9448');
-  px(cx-6, by-29, 12, 4, '#54ad59');
-  px(cx-9, by-24, 6, 4, '#4ea354');
-  px(cx-2, by-28, 6, 4, '#6bc46b');
+  // 地面阴影（贴合脚底）
+  octx.globalAlpha=0.26; octx.fillStyle='#000';
+  octx.beginPath(); octx.ellipse(cx, by+4, 11, 3.4, 0,0,7); octx.fill(); octx.globalAlpha=1;
+
+  // 树根（向两侧岔开，避免"悬浮"观感）
+  px(cx-6, by+2, 12, 2, '#5f3f24');
+  px(cx-8, by+1, 4, 2, '#6b4826');
+  px(cx+4, by+1, 4, 2, '#6b4826');
+  px(cx-9, by+2, 3, 1, '#4e3420');
+  px(cx+6, by+2, 3, 1, '#4e3420');
+
+  // 树干：底部压到 by+3，不再悬空
+  px(cx-3, by-11, 6, 14, '#7a5230');
+  px(cx-2, by-11, 2, 14, '#916339');
+  px(cx+2, by-9, 1, 12, '#5f3f24');
+  // 树干上的纹路
+  px(cx-1, by-6, 1, 3, '#6b4826');
+  px(cx-4, by-2, 2, 2, '#5f3f24');
+
+  // 树冠（三层，压在树干顶部）
+  px(cx-10, by-22, 20, 7, '#2f7a3a');
+  px(cx-8, by-27, 16, 6, '#3f9448');
+  px(cx-6, by-30, 12, 4, '#54ad59');
+  px(cx-9, by-24, 7, 4, '#4ea354');
+  px(cx-1, by-29, 7, 4, '#6bc46b');
   // 高光
-  px(cx-6, by-28, 3, 2, '#8fdc8a');
+  px(cx-6, by-29, 3, 2, '#8fdc8a');
+  px(cx+2, by-27, 2, 1, '#96e08e');
+
   if(S.hitFlash>0){
     octx.globalAlpha=Math.min(0.7, S.hitFlash*4);
-    octx.fillStyle='#fff'; octx.fillRect(cx-11, by-30, 22, 34);
+    octx.fillStyle='#fff'; octx.fillRect(cx-11, by-31, 22, 36);
     octx.globalAlpha=1;
   }
 }
