@@ -1266,7 +1266,7 @@ cv.addEventListener('mouseup', ()=>{ joy.active=false; joy.dx=joy.dy=0; });
 const FW=128, FH=128;
 let mapName='town';
 let forestWorld=null, forestRoad=null, forestWater=null, forestData=null, forestMobs=[];
-let forestObstacles=[];
+let forestObstacles=[], forestObsTile=null;
 let townData=null;
 // ---------- 森林：与主城同一套生成算法，只换数据 ----------
 const FW_ROADS=[
@@ -1373,54 +1373,54 @@ function buildForestWorld(){
   }
   window.__FOREST_BRIDGE={x0:bX0, x1:bX1, y:ROAD_BASE_Y, hh:2};
 
-  // ---- 随机障碍物：圆角长条（倒木/岩石），不排成方块 ----
+  // ---- 障碍物：整格对齐的圆角长条，分区均匀分布 ----
   const obstacles=[];
-  const isFree=(px,py)=>{
-    const tx=Math.floor(px/TILE), ty=Math.floor(py/TILE);
-    if(tx<1||ty<1||tx>=FW-1||ty>=FH-1) return false;
-    if(w[ty][tx]!==0) return false;
-    if(water[ty*FW+tx]>8) return false;
-    if(Math.abs(py-ROAD_BASE_Y*TILE)<70) return false;          // 主路留空
-    if(Math.abs(px-(bX0+bX1)/2*TILE)<160 && Math.abs(py-ROAD_BASE_Y*TILE)<140) return false; // 桥头留空
+  const obsTile=new Uint8Array(FW*FH);
+  const bcxT=Math.round((bX0+bX1)/2);
+  const freeTile=(x,y)=>{
+    if(x<2||y<2||x>=FW-2||y>=FH-2) return false;
+    if(w[y][x]!==0) return false;
+    if(water[y*FW+x]>8) return false;
+    if(Math.abs(y-ROAD_BASE_Y)<5) return false;
+    if(Math.abs(y-ROAD_BASE_Y)<8 && Math.abs(x-bcxT)<12) return false;
+    if(obsTile[y*FW+x]) return false;
     return true;
   };
   const rndAt=(i,k)=>hash(i*17+k*31+7, i*13+k*7+3);
-  const segGap=(a,b)=>{          // 两条线段的最小距离（采样近似）
-    let md=1e9;
-    for(let i=0;i<=6;i++){
-      const x=a.x1+(a.x2-a.x1)*i/6, y=a.y1+(a.y2-a.y1)*i/6;
-      const d=segDist(x,y,b.x1,b.y1,b.x2,b.y2);
-      if(d<md) md=d;
+  const SECT=7;
+  let counter=0;
+  for(let sy=0; sy<SECT; sy++) for(let sx=0; sx<SECT; sx++){
+    const cx0=Math.floor(sx*FW/SECT), cy0=Math.floor(sy*FH/SECT);
+    const cw=Math.floor(FW/SECT), chh=Math.floor(FH/SECT);
+    const howMany=1+(rndAt(counter,1)<0.55?1:0);
+    for(let k=0;k<howMany;k++){
+      counter++;
+      let placed=false;
+      for(let attempt=0; attempt<5 && !placed; attempt++){
+        const cc=counter*10+attempt;
+        const horiz=rndAt(cc,2)<0.5;
+        const len=2+Math.floor(rndAt(cc,3)*4);
+        const tx=cx0+2+Math.floor(rndAt(cc,4)*Math.max(1,cw-6));
+        const ty=cy0+2+Math.floor(rndAt(cc,5)*Math.max(1,chh-6));
+        let ok=true;
+        for(let i=0;i<len;i++){
+          const x=horiz?tx+i:tx, y=horiz?ty:ty+i;
+          if(!freeTile(x,y)){ ok=false; break; }
+        }
+        if(!ok) continue;
+        for(let i=0;i<len;i++){
+          const x=horiz?tx+i:tx, y=horiz?ty:ty+i;
+          obsTile[y*FW+x]=1;
+        }
+        obstacles.push({
+          x:tx*TILE, y:ty*TILE,
+          w:horiz?len*TILE:TILE, h:horiz?TILE:len*TILE, seed:cc
+        });
+        placed=true;
+      }
     }
-    return md;
-  };
-  for(let i=0;i<900;i++){
-    if(obstacles.length>=100) break;
-    const bx=100+rndAt(i,1)*(WORLD_W-200);
-    const by=100+rndAt(i,2)*(WORLD_H-200);
-    const ang=rndAt(i,3)*Math.PI*2;
-    const len=34+rndAt(i,4)*90;
-    const wid=9+Math.floor(rndAt(i,5)*7);
-    const x1=bx-Math.cos(ang)*len/2, y1=by-Math.sin(ang)*len/2;
-    const x2=bx+Math.cos(ang)*len/2, y2=by+Math.sin(ang)*len/2;
-    // 两端和中间都必须是空地
-    let ok=true;
-    for(let t=0;t<=6;t++){
-      const px=x1+(x2-x1)*t/6, py=y1+(y2-y1)*t/6;
-      if(!isFree(px,py)){ ok=false; break; }
-    }
-    if(!ok) continue;
-    // 与已有障碍保持距离（线段到线段）
-    const cand={x1,y1,x2,y2};
-    let far=true;
-    for(const o of obstacles){
-      if(segGap(cand,o) < (wid+o.w)/2 + 9){ far=false; break; }
-    }
-    if(!far) continue;
-    obstacles.push({x1,y1,x2,y2,w:wid,seed:i});
   }
-  window.__FOREST_OBS=obstacles;
-  return {world:w, road, water, MW, MH, waterMask, roadMask, obstacles};
+  return {world:w, road, water, MW, MH, waterMask, roadMask, obstacles, obsTile};
 }
 function RIVER_X_AT(py){
   let cx=0, best=1e9;
@@ -1436,14 +1436,8 @@ function forestSolid(x,y){
   const tx=Math.floor(x/TILE), ty=Math.floor(y/TILE);
   if(tx<0||ty<0||tx>=FW||ty>=FH) return true;
   if(forestWater[ty*FW+tx]>8) return true;
-  // 障碍物（倒木/岩石）
-  if(forestObstacles && forestObstacles.length){
-    for(let i=0;i<forestObstacles.length;i++){
-      const o=forestObstacles[i];
-      if(Math.abs(o.x1-x)>220 && Math.abs(o.x2-x)>220) continue;
-      if(segDist(x,y,o.x1,o.y1,o.x2,o.y2) < o.w/2+4) return true;
-    }
-  }
+  // 障碍物：整格阻挡
+  if(forestObsTile && forestObsTile[ty*FW+tx]) return true;
   if(forestRoad[ty*FW+tx]>0) return false;
   if(forestWorld[ty][tx]!==0) return true;
   return false;
@@ -1458,6 +1452,7 @@ function setMap(name){
   if(name==='forest'){
     if(!forestWorld){ const f=buildForestWorld(); forestWorld=f.world; forestRoad=f.road; forestWater=f.water; forestData=f; }
     forestObstacles=(forestData&&forestData.obstacles)||[];
+    forestObsTile=(forestData&&forestData.obsTile)||null;
     WCOLS=FW; WROWS=FH;
     world=forestWorld;
     tileRoadCnt=forestRoad;
@@ -2311,37 +2306,41 @@ function drawForestBush(sx,sy,tx,ty){
   octx.fillStyle='#57a066'; octx.fillRect(sx+9,sy+5,2,2);
 }
 function drawForestObstacle(o, ox0, oy0){
-  const x1=o.x1-ox0, y1=o.y1-oy0, x2=o.x2-ox0, y2=o.y2-oy0;
-  const len=Math.hypot(x2-x1,y2-y1);
-  const steps=Math.max(2, Math.round(len/3));
-  const h=o.seed||0;
-  // 影子
-  for(let i=0;i<=steps;i++){
-    const t=i/steps, x=Math.round(x1+(x2-x1)*t), y=Math.round(y1+(y2-y1)*t);
-    octx.fillStyle='rgba(10,30,16,.28)';
-    octx.fillRect(x-Math.round(o.w/2), y-Math.round(o.w/2)+5, o.w, o.w);
+  const x=o.x-ox0, y=o.y-oy0, w=o.w, h=o.h;
+  const horiz=w>=h;
+  const th=horiz?h:w;                        // 厚度
+  const r=Math.max(3, Math.round(th*0.42));  // 圆角半径
+  const dark='#2f5b28', mid='#3d7533', lite='#4e8f3f';
+
+  // 阴影
+  octx.fillStyle='rgba(10,32,16,.26)';
+  octx.fillRect(x+3, y+4, w-2, h-2);
+
+  // 主体：中间实心 + 两端圆角（用逐行内缩模拟）
+  const rows=Math.max(4, Math.round(th));
+  for(let i=0;i<rows;i++){
+    const t=i/(rows-1);
+    // 距离上下边缘越近，内缩越多 → 圆角
+    const inset=Math.round(r*Math.pow(Math.abs(t-0.5)*2, 2.2));
+    const yy=y+i;
+    const xx=x+inset, ww=w-inset*2;
+    if(ww<=0) continue;
+    octx.fillStyle = (i<2)?lite : (i>rows-3?dark:mid);
+    octx.fillRect(xx, yy, ww, 1);
   }
-  // 主体（深浅交错，木头质感）
-  for(let i=0;i<=steps;i++){
-    const t=i/steps, x=Math.round(x1+(x2-x1)*t), y=Math.round(y1+(y2-y1)*t);
-    const band=(Math.floor(i/2)+h)%3;
-    octx.fillStyle = band===0?'#6b4a2e' : band===1?'#7d5936' : '#5c3f27';
-    octx.fillRect(x-Math.round(o.w/2), y-Math.round(o.w/2), o.w, o.w);
-  }
-  // 顶部高光 + 底部阴影（让它是"横躺的木头"）
-  for(let i=0;i<=steps;i++){
-    const t=i/steps, x=Math.round(x1+(x2-x1)*t), y=Math.round(y1+(y2-y1)*t);
-    octx.fillStyle='#9c7448';
-    octx.fillRect(x-Math.round(o.w/2)+1, y-Math.round(o.w/2), Math.max(2,o.w-2), 1);
-    octx.fillStyle='#432c19';
-    octx.fillRect(x-Math.round(o.w/2), y+Math.round(o.w/2)-1, o.w, 1);
-  }
-  // 两端年轮
-  for(const [ex,ey] of [[x1,y1],[x2,y2]]){
-    octx.fillStyle='#a8834f';
-    octx.fillRect(Math.round(ex)-Math.round(o.w/2), Math.round(ey)-Math.round(o.w/2), o.w, o.w);
-    octx.fillStyle='#6b4a2e';
-    octx.fillRect(Math.round(ex)-Math.round(o.w/2)+2, Math.round(ey)-Math.round(o.w/2)+2, Math.max(2,o.w-4), Math.max(2,o.w-4));
+  // 描边（更暗）
+  octx.fillStyle='#22401d';
+  octx.fillRect(x+r, y, w-r*2, 1);
+  octx.fillRect(x+r, y+h-1, w-r*2, 1);
+  octx.fillRect(x, y+r, 1, h-r*2);
+  octx.fillRect(x+w-1, y+r, 1, h-r*2);
+  // 木纹/苔点
+  for(let k=0;k<Math.max(2,Math.floor((horiz?w:h)/14));k++){
+    const t=(k+0.5)/Math.max(1,Math.floor((horiz?w:h)/14));
+    const px2=horiz? x+8+t*(w-16) : x+Math.round(w/2);
+    const py2=horiz? y+Math.round(h/2) : y+8+t*(h-16);
+    octx.fillStyle = (k%2)?'#2a4f24':'#589e46';
+    octx.fillRect(Math.round(px2), Math.round(py2), horiz?5:3, horiz?3:5);
   }
 }
 
