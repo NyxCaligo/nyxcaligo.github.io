@@ -1387,34 +1387,31 @@ function buildForestWorld(){
     return true;
   };
   const rndAt=(i,k)=>hash(i*17+k*31+7, i*13+k*7+3);
-  const SECT=7;
+  const SHAPES=[[2,2],[2,3],[3,2],[3,3],[3,4],[4,3],[4,4],[1,4],[4,1],[1,5],[5,1],[2,4],[4,2],[3,5],[5,3]];
+  const SECT=8;
   let counter=0;
   for(let sy=0; sy<SECT; sy++) for(let sx=0; sx<SECT; sx++){
     const cx0=Math.floor(sx*FW/SECT), cy0=Math.floor(sy*FH/SECT);
     const cw=Math.floor(FW/SECT), chh=Math.floor(FH/SECT);
-    const howMany=2+(rndAt(counter,1)<0.5?1:0);
+    const howMany=2+(rndAt(counter,1)<0.6?1:0);
     for(let k=0;k<howMany;k++){
       counter++;
       let placed=false;
-      for(let attempt=0; attempt<5 && !placed; attempt++){
-        const cc=counter*10+attempt;
-        const horiz=rndAt(cc,2)<0.5;
-        const len=2+Math.floor(rndAt(cc,3)*4);
-        const tx=cx0+2+Math.floor(rndAt(cc,4)*Math.max(1,cw-6));
-        const ty=cy0+2+Math.floor(rndAt(cc,5)*Math.max(1,chh-6));
+      for(let attempt=0; attempt<8 && !placed; attempt++){
+        const cc=counter*17+attempt;
+        const shp=SHAPES[Math.floor(rndAt(cc,1)*SHAPES.length)%SHAPES.length];
+        const bw=shp[0], bh=shp[1];
+        const tx=cx0+1+Math.floor(rndAt(cc,2)*Math.max(1,cw-bw-1));
+        const ty=cy0+1+Math.floor(rndAt(cc,3)*Math.max(1,chh-bh-1));
         let ok=true;
-        for(let i=0;i<len;i++){
-          const x=horiz?tx+i:tx, y=horiz?ty:ty+i;
-          if(!freeTile(x,y)){ ok=false; break; }
+        for(let yy=0;yy<bh && ok;yy++) for(let xx=0;xx<bw;xx++){
+          if(!freeTile(tx+xx, ty+yy)){ ok=false; break; }
         }
         if(!ok) continue;
-        for(let i=0;i<len;i++){
-          const x=horiz?tx+i:tx, y=horiz?ty:ty+i;
-          obsTile[y*FW+x]=1;
-        }
+        for(let yy=0;yy<bh;yy++) for(let xx=0;xx<bw;xx++) obsTile[(ty+yy)*FW+(tx+xx)]=1;
         obstacles.push({
           x:tx*TILE, y:ty*TILE,
-          w:horiz?len*TILE:TILE, h:horiz?TILE:len*TILE, seed:cc
+          w:bw*TILE, h:bh*TILE, seed:cc
         });
         placed=true;
       }
