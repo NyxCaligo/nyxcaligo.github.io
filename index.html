@@ -1280,6 +1280,7 @@ const FW_RIVERS=[
 const FW_LAKE=[];   // 森林只有一条河，不做湖
 const BRIDGE_Y_PX=1216;
 const ROAD_BASE_Y=76;
+const FOREST_EXIT={x:5*TILE, y:76*TILE};
 const BRIDGE_HALF_H=1;
 function buildForestWorld(){
   const w=[];
@@ -2398,10 +2399,40 @@ function drawForestObstacle(o, ox0, oy0){
       octx.fillStyle=sh;
       octx.fillRect(x+(openL?2:0), y+TILE-3, TILE-(openL?2:0)-(openR?2:0), 2);
     }
-    // 苔点
-    const hh=hash(o.seed*7+rx*13, o.seed*5+ry*11);
-    if(hh>0.74){ octx.fillStyle='#589e46'; octx.fillRect(x+4+Math.floor(hh*5), y+6, 3, 3); }
-    else if(hh<0.18){ octx.fillStyle='#26471f'; octx.fillRect(x+7, y+9+Math.floor(hh*5), 4, 2); }
+    // ---- 细致纹路 ----
+    const rr=(a,b)=>hash(o.seed*31+rx*7+a*13, o.seed*17+ry*11+b*7);
+    // ① 裂纹（2~3 条短线）
+    for(let i=0;i<3;i++){
+      const sx2=x+3+Math.floor(rr(i,1)*(TILE-7));
+      const sy2=y+3+Math.floor(rr(i,2)*(TILE-7));
+      const len=2+Math.floor(rr(i,3)*4);
+      octx.fillStyle = (i%2)? '#2a4f22':'#335c29';
+      if(rr(i,4)>0.5) octx.fillRect(sx2, sy2, len, 1);
+      else octx.fillRect(sx2, sy2, 1, len);
+      if(rr(i,5)>0.6) octx.fillRect(sx2+len*0.6|0, sy2+1, 1, 2);
+    }
+    // ② 苔藓斑（2~3 个 2px 绿块）
+    for(let i=0;i<3;i++){
+      if(rr(i,6)>0.62){
+        const gx2=x+2+Math.floor(rr(i,7)*(TILE-5));
+        const gy2=y+2+Math.floor(rr(i,8)*(TILE-5));
+        octx.fillStyle = rr(i,9)>0.5? '#5aa244':'#4a8f39';
+        octx.fillRect(gx2, gy2, 2, 2);
+        if(rr(i,10)>0.7){ octx.fillStyle='#68b04e'; octx.fillRect(gx2+1, gy2-1, 1, 1); }
+      }
+    }
+    // ③ 碎石/砂粒（亮暗点交错）
+    for(let i=0;i<4;i++){
+      const px2=x+2+Math.floor(rr(i,11)*(TILE-4));
+      const py2=y+2+Math.floor(rr(i,12)*(TILE-4));
+      octx.fillStyle = rr(i,13)>0.5? '#7fb56a':'#22401c';
+      octx.fillRect(px2, py2, 1, 1);
+    }
+    // ④ 边缘缺口（只在露出的边上）
+    if(openU && rr(0,14)>0.55){ octx.fillStyle='#1d3618'; octx.fillRect(x+5+Math.floor(rr(1,15)*6), y, 2, 1); }
+    if(openD && rr(2,14)>0.55){ octx.fillStyle='#1d3618'; octx.fillRect(x+5+Math.floor(rr(3,15)*6), y+TILE-1, 2, 1); }
+    if(openL && rr(4,14)>0.55){ octx.fillStyle='#1d3618'; octx.fillRect(x, y+5+Math.floor(rr(5,15)*6), 1, 2); }
+    if(openR && rr(6,14)>0.55){ octx.fillStyle='#1d3618'; octx.fillRect(x+TILE-1, y+5+Math.floor(rr(7,15)*6), 1, 2); }
   }
 }
 
@@ -2482,6 +2513,34 @@ function drawForestWall(sx,sy,tx,ty){
   for(let i=0;i<TILE;i+=2){
     if(hash(tx*11+i,ty*13)>0.5) octx.fillRect(sx+i, sy+TILE-1, 2, 1);
     if(hash(tx*17+i,ty*19)>0.6) octx.fillRect(sx+TILE-1, sy+i, 1, 2);
+  }
+}
+function drawForestExit(){
+  const x=FOREST_EXIT.x-camX, y=FOREST_EXIT.y-camY;
+  if(x<-60||y<-60||x>VW+60||y>VH+60) return;
+  // 影子
+  px(x-3, y+2, 30, 4, 'rgba(8,26,14,.30)');
+  // 立柱
+  px(x+9, y-26, 5, 28, '#6b4a2e');
+  px(x+9, y-26, 5, 2, '#8a6440');
+  px(x+13, y-26, 1, 28, '#4a3220');
+  // 牌面
+  px(x-2, y-40, 26, 16, '#0b2545');
+  px(x-1, y-39, 24, 14, '#c9a96b');
+  px(x-1, y-39, 24, 2, '#e2c58b');
+  px(x-1, y-27, 24, 2, '#a8865a');
+  // 箭头（朝左 = 回城）
+  px(x+4, y-34, 8, 2, '#5a3a1f');
+  px(x+3, y-35, 3, 2, '#5a3a1f');
+  px(x+3, y-31, 3, 2, '#5a3a1f');
+  px(x+5, y-32, 3, 2, '#5a3a1f');
+  // 小字点
+  px(x+14, y-35, 2, 2, '#5a3a1f');
+  px(x+14, y-31, 2, 2, '#5a3a1f');
+  // 靠近时头顶提示星
+  if(Math.hypot(player.x-FOREST_EXIT.x, player.y-FOREST_EXIT.y)<30){
+    const t=Math.sin(gtime*4)*1.5;
+    drawStar(x+12, y-50+t, 3, '#f5c542');
   }
 }
 function drawForestBridge(){
@@ -2655,7 +2714,7 @@ function render(){
     }
     if(mapName==='town') drawBridge();
   }
-  if(mapName==='forest') drawForestBridge();
+  if(mapName==='forest'){ drawForestBridge(); drawForestExit(); }
   drawAmbient();
   drawFootParts();
   drawOrbs();
@@ -5248,6 +5307,9 @@ function updateInteract(){
     if(dist<22 && facingTarget(d.x,d.y) && dist<bd){ bd=dist; best={k:'drop', d}; }
   }
   if(mapName==='forest'){
+    if(Math.hypot(player.x-FOREST_EXIT.x, player.y-FOREST_EXIT.y)<30){
+      interactTarget={k:'exitForest'}; nearNpc=true; updateHudButtons(); return;
+    }
     if(player.x<9*TILE && Math.abs(player.y-76*TILE)<40){ interactTarget={k:'exitForest'}; nearNpc=true; updateHudButtons(); return; }
     interactTarget=null; nearNpc=false; updateHudButtons(); return;
   }
