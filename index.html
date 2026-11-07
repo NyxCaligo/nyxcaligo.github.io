@@ -5538,11 +5538,26 @@ function sfxSwing(){
   src.connect(bp); bp.connect(g); g.connect(sfxGain);
   src.start(t); src.stop(t+0.24);
 }
+function autoAimTarget(range){
+  const R=range||46;
+  let best=null, bd=1e9;
+  const consider=(x,y)=>{ const d=Math.hypot(x-player.x, y-player.y); if(d<R && d<bd){ bd=d; best={x,y,d}; } };
+  if(typeof slimes!=='undefined') for(const sl of slimes){ if(sl && !sl.dead) consider(sl.x, sl.y); }
+  if(mapName==='forest' && typeof forestMobs!=='undefined') for(const fm of forestMobs){ if(fm && !fm.dead) consider(fm.x, fm.y); }
+  if(typeof DUMMY!=='undefined' && DUMMY) consider(DUMMY.x, DUMMY.y);
+  return best;
+}
 function doAttack(){
   if(talking || state!=='city' || inShop) return;
   const wid=EQUIP.weapons[heldSlot];
   if(!wid || !ITEMS[wid]){ toastMsg('您还没有装备武器'); sfxBeep(); return; }
   if(attacking>0 || atkCd>0) return;
+  // 软自动瞄准：附近有目标就先转向它
+  const aim=autoAimTarget(46);
+  if(aim){
+    const adx=aim.x-player.x;
+    if(Math.abs(adx)>2){ player.face = adx>0?1:-1; }
+  }
   attacking=ATK_DUR;
   atkCd=(ITEMS[wid].rate||1.8);
   sfxSwing(); vibrate(2);
