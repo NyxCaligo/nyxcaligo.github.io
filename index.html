@@ -6672,7 +6672,6 @@ function updateSlime(dt){
     s.wob+=dt*7;
     const dx=player.x-s.x, dy=player.y-s.y;
     const dist=Math.hypot(dx,dy)||1;
-    s.face = dx>=0?1:-1;
 
     // ---- 侦测：以自身为圆心（试炼怪不适用） ----
     if(s.quest){
@@ -6704,9 +6703,9 @@ function updateSlime(dt){
       const wx=s.wanderX-s.x, wy=s.wanderY-s.y;
       const wd=Math.hypot(wx,wy)||1;
       if(wd>4){
-        const ws=52*0.32*dt;                 // 游荡速度约为追击的 1/3
+        const ws=(s.speed||52)*0.32*dt;      // 游荡速度约为追击的 1/3
         const nx2=s.x+wx/wd*ws, ny2=s.y+wy/wd*ws;
-        if(!solidAt(nx2,ny2)){ s.x=nx2; s.y=ny2; }
+        if(!solidAt(nx2,ny2)){ s.x=nx2; s.y=ny2; if(Math.abs(wx)>0.4) s.face = wx>0?1:-1; }
         else s.wanderT=0;
       }
       s.vx*=Math.pow(0.001,dt); s.vy*=Math.pow(0.001,dt);
@@ -6716,6 +6715,7 @@ function updateSlime(dt){
     s.x+=s.vx*dt; s.y+=s.vy*dt;
     s.vx*=Math.pow(0.001,dt); s.vy*=Math.pow(0.001,dt);
     const speed = s.angry ? 45 : (s.speed || 52);
+    s.face = dx>=0?1:-1;                     // 追击时才朝玩家
     if(dist>14){
       const dxn=dx/dist, dyn=dy/dist;
       const step=speed*dt;
@@ -7368,14 +7368,14 @@ function drawCaterpillar(S){
     px(x-r+1, legY, 2, 2, '#2a1f26');
     px(x+r-3, legY, 2, 2, '#2a1f26');
   }
-  // 头（比身体大、更亮，没有五官）
-  const hx=cx+dir*6, hy=by-8;
-  px(hx-7, hy-7, 14, 14, '#8ed85c');
-  px(hx-6, hy-6, 12, 3, '#b8f08a');
-  px(hx-7, hy+5, 14, 2, '#5da33a');
-  px(hx-5, hy-5, 4, 2, '#c8f6a0');
-  px(hx-3, hy-9, 2, 2, '#6b9c46');
-  px(hx+2, hy-9, 2, 2, '#6b9c46');
+  // 头（与身体同尺寸，只靠更亮的颜色和触角区分）
+  const hx=cx+dir*6, hy=by-7;
+  px(hx-5, hy-5, 10, 10, '#8ed85c');
+  px(hx-4, hy-4, 8, 2, '#b8f08a');
+  px(hx-5, hy+3, 10, 2, '#5da33a');
+  px(hx-3, hy-3, 3, 2, '#c8f6a0');
+  px(hx-2, hy-7, 2, 2, '#6b9c46');
+  px(hx+1, hy-7, 2, 2, '#6b9c46');
   if(S.hitFlash>0){
     octx.globalAlpha=Math.min(0.7, S.hitFlash*4);
     octx.fillStyle='#fff'; octx.fillRect(cx-18, by-17, 36, 19);
