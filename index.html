@@ -2160,23 +2160,66 @@ function drawForestBush(sx,sy,tx,ty){
   octx.fillStyle='#57a066'; octx.fillRect(sx+9,sy+5,2,2);
 }
 function drawForestWall(sx,sy,tx,ty){
-  // 棕褐色土块墙：边缘起伏 + 内部随机纹路
+  // 棕褐色土块墙：四面都可能长草（朝向草地的一侧随机生成）
   const h=hash(tx*3+5,ty*9+1), h2=hash(tx*7+2,ty*11+6);
-  const bump=Math.floor(h2*6);
   octx.fillStyle = h<0.5 ? '#6b4a2e' : '#755134';
   octx.fillRect(sx,sy,TILE,TILE);
-  // 顶部起伏的草坡
-  // 内侧草檐：与草地接壤处随机探出 2px
-  for(let i=0;i<TILE;i+=2){
-    const hh=hash(tx*7+i, ty*11+3);
-    if(hh>0.55){ octx.fillStyle='#4f8f3a'; octx.fillRect(sx+i, sy+TILE-bump-2, 2, 2); }
+
+  // 判断四邻：哪一边是草地（非土块）
+  const isWall=(x,y)=>{
+    if(x<0||y<0||x>=WCOLS||y>=WROWS) return true;
+    return world[y][x]!==0;
+  };
+  const up  = !isWall(tx,ty-1);
+  const down= !isWall(tx,ty+1);
+  const left= !isWall(tx-1,ty);
+  const right=!isWall(tx+1,ty);
+
+  const bumpT=2+Math.floor(hash(tx*5+1,ty*7+2)*5);
+  const bumpB=2+Math.floor(hash(tx*5+3,ty*7+4)*5);
+  const bumpL=2+Math.floor(hash(tx*9+1,ty*11+2)*5);
+  const bumpR=2+Math.floor(hash(tx*9+3,ty*11+4)*5);
+
+  // ---- 上边：草 + 随机竖向探出 ----
+  if(up){
+    octx.fillStyle='#4f8f3a'; octx.fillRect(sx, sy, TILE, bumpT);
+    for(let i=0;i<TILE;i+=2){
+      const hh=hash(tx*7+i, ty*11+3);
+      if(hh>0.45) octx.fillStyle = hh>0.8?'#5da648':'#4f8f3a';
+      if(hh>0.45) octx.fillRect(sx+i, sy+bumpT, 2, 1+Math.floor(hh*4));
+    }
   }
-  octx.fillStyle='#4f8f3a';
-  octx.fillRect(sx, sy+TILE-bump, TILE, bump);
-  octx.fillStyle='#3f7a2e';
-  octx.fillRect(sx+Math.floor(h*10), sy+TILE-bump+1, 2, 2);
-  octx.fillStyle='#5da648';
-  if(h>0.6) octx.fillRect(sx+Math.floor(h2*9), sy+TILE-Math.max(1,bump-1), 3, 1);
+  // ---- 下边 ----
+  if(down){
+    octx.fillStyle='#4f8f3a'; octx.fillRect(sx, sy+TILE-bumpB, TILE, bumpB);
+    for(let i=0;i<TILE;i+=2){
+      const hh=hash(tx*7+i, ty*13+5);
+      if(hh>0.5) octx.fillRect(sx+i, sy+TILE-bumpB-1-Math.floor(hh*4), 2, 2);
+    }
+  }
+  // ---- 左边：竖向随机草（你要的） ----
+  if(left){
+    octx.fillStyle='#4f8f3a'; octx.fillRect(sx, sy, bumpL, TILE);
+    for(let j=0;j<TILE;j+=2){
+      const hh=hash(tx*11+j, ty*5+7);
+      if(hh>0.45){
+        octx.fillStyle = hh>0.8?'#5da648':'#4f8f3a';
+        octx.fillRect(sx+bumpL, sy+j, 1+Math.floor(hh*4), 2);
+      }
+    }
+  }
+  // ---- 右边 ----
+  if(right){
+    octx.fillStyle='#4f8f3a'; octx.fillRect(sx+TILE-bumpR, sy, bumpR, TILE);
+    for(let j=0;j<TILE;j+=2){
+      const hh=hash(tx*13+j, ty*7+9);
+      if(hh>0.5){
+        octx.fillStyle = hh>0.82?'#5da648':'#4f8f3a';
+        octx.fillRect(sx+TILE-bumpR-1-Math.floor(hh*4), sy+j, 2, 2);
+      }
+    }
+  }
+
   // 内部随机土纹
   for(let i=0;i<5;i++){
     const hh=hash(tx*13+i, ty*17+i*3);
@@ -2186,13 +2229,13 @@ function drawForestWall(sx,sy,tx,ty){
   // 不规则边缘（亮/暗）
   octx.fillStyle='#8a6440';
   for(let i=0;i<TILE;i+=2){
-    if(hash(tx*5+i,ty*3)>0.35) octx.fillRect(sx+i, sy, 2, 1);
-    if(hash(tx*9+i,ty*7)>0.5) octx.fillRect(sx, sy+i, 1, 2);
+    if(hash(tx*5+i,ty*3)>0.45) octx.fillRect(sx+i, sy, 2, 1);
+    if(hash(tx*9+i,ty*7)>0.55) octx.fillRect(sx, sy+i, 1, 2);
   }
   octx.fillStyle='#4a3220';
   for(let i=0;i<TILE;i+=2){
-    if(hash(tx*11+i,ty*13)>0.4) octx.fillRect(sx+i, sy+TILE-1, 2, 1);
-    if(hash(tx*17+i,ty*19)>0.55) octx.fillRect(sx+TILE-1, sy+i, 1, 2);
+    if(hash(tx*11+i,ty*13)>0.5) octx.fillRect(sx+i, sy+TILE-1, 2, 1);
+    if(hash(tx*17+i,ty*19)>0.6) octx.fillRect(sx+TILE-1, sy+i, 1, 2);
   }
 }
 function drawForestBridge(){
