@@ -1181,7 +1181,8 @@ function showWeaponTip(idx){
   const L=equipLayout();
   const wp=typeof cssScale!=='undefined'?cssScale:1;
   const ox=typeof oxCss!=='undefined'?oxCss:0, oy=typeof oyCss!=='undefined'?oyCss:0;
-  const pxL=(L.wx+L.GW/2)*wp+ox, pyT=(L.wy-4)*wp+oy;
+  const dpr=window.devicePixelRatio||1;
+  const pxL=((L.wx+L.GW/2)*wp+ox)/dpr, pyT=((L.wy-4)*wp+oy)/dpr;
   el.classList.remove('hidden');
   const r=el.getBoundingClientRect();
   el.style.left=Math.max(4, Math.min(window.innerWidth-r.width-4, pxL-r.width/2))+'px';
@@ -1195,13 +1196,17 @@ function startWepPress(vx,vy){
   if(idx<0 || !EQUIP.weapons[idx]){ wepPress.t=null; return; }
   wepPress.x=vx; wepPress.y=vy;
   clearTimeout(wepPress.t);
-  wepPress.t=setTimeout(()=>{ wepPress.shown=true; showWeaponTip(wepPress.slot); vibrate(3); }, 420);
+  wepPress.t=setTimeout(()=>{ wepPress.shown=true; showWeaponTip(wepPress.slot); vibrate(3); }, 650);
 }
 function moveWepPress(vx,vy){
   if(!wepPress.t) return;
   if(Math.hypot(vx-wepPress.x, vy-wepPress.y) > 8){ clearTimeout(wepPress.t); wepPress.t=null; }
 }
 function endWepPress(){ clearTimeout(wepPress.t); wepPress.t=null; }
+function wepPressJustShown(){
+  if(wepPress.shown){ wepPress.shown=false; return true; }
+  return false;
+}
 
 function handleTap(vx,vy){
   if(state!=='city') return;
