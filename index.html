@@ -1392,7 +1392,7 @@ function buildForestWorld(){
   for(let sy=0; sy<SECT; sy++) for(let sx=0; sx<SECT; sx++){
     const cx0=Math.floor(sx*FW/SECT), cy0=Math.floor(sy*FH/SECT);
     const cw=Math.floor(FW/SECT), chh=Math.floor(FH/SECT);
-    const howMany=1+(rndAt(counter,1)<0.55?1:0);
+    const howMany=2+(rndAt(counter,1)<0.5?1:0);
     for(let k=0;k<howMany;k++){
       counter++;
       let placed=false;
@@ -2306,41 +2306,34 @@ function drawForestBush(sx,sy,tx,ty){
   octx.fillStyle='#57a066'; octx.fillRect(sx+9,sy+5,2,2);
 }
 function drawForestObstacle(o, ox0, oy0){
-  const x=o.x-ox0, y=o.y-oy0, w=o.w, h=o.h;
-  const horiz=w>=h;
-  const th=horiz?h:w;                        // 厚度
-  const r=Math.max(3, Math.round(th*0.42));  // 圆角半径
-  const dark='#2f5b28', mid='#3d7533', lite='#4e8f3f';
-
-  // 阴影
-  octx.fillStyle='rgba(10,32,16,.26)';
-  octx.fillRect(x+3, y+4, w-2, h-2);
-
-  // 主体：中间实心 + 两端圆角（用逐行内缩模拟）
-  const rows=Math.max(4, Math.round(th));
-  for(let i=0;i<rows;i++){
-    const t=i/(rows-1);
-    // 距离上下边缘越近，内缩越多 → 圆角
-    const inset=Math.round(r*Math.pow(Math.abs(t-0.5)*2, 2.2));
-    const yy=y+i;
-    const xx=x+inset, ww=w-inset*2;
-    if(ww<=0) continue;
-    octx.fillStyle = (i<2)?lite : (i>rows-3?dark:mid);
-    octx.fillRect(xx, yy, ww, 1);
-  }
-  // 描边（更暗）
-  octx.fillStyle='#22401d';
-  octx.fillRect(x+r, y, w-r*2, 1);
-  octx.fillRect(x+r, y+h-1, w-r*2, 1);
-  octx.fillRect(x, y+r, 1, h-r*2);
-  octx.fillRect(x+w-1, y+r, 1, h-r*2);
-  // 木纹/苔点
-  for(let k=0;k<Math.max(2,Math.floor((horiz?w:h)/14));k++){
-    const t=(k+0.5)/Math.max(1,Math.floor((horiz?w:h)/14));
-    const px2=horiz? x+8+t*(w-16) : x+Math.round(w/2);
-    const py2=horiz? y+Math.round(h/2) : y+8+t*(h-16);
-    octx.fillStyle = (k%2)?'#2a4f24':'#589e46';
-    octx.fillRect(Math.round(px2), Math.round(py2), horiz?5:3, horiz?3:5);
+  const cols=Math.max(1,Math.round(o.w/TILE));
+  const rows=Math.max(1,Math.round(o.h/TILE));
+  for(let ry=0; ry<rows; ry++){
+    for(let rx=0; rx<cols; rx++){
+      const x=o.x+rx*TILE-ox0, y=o.y+ry*TILE-oy0;
+      // 圆角方块（每格独立，像一块块木头/石头）
+      octx.fillStyle='#1d3618';
+      octx.fillRect(x+1, y,   TILE-2, TILE);
+      octx.fillRect(x,   y+1, TILE,   TILE-2);
+      octx.fillStyle='#3d7533';
+      octx.fillRect(x+2, y+1, TILE-4, TILE-2);
+      octx.fillRect(x+1, y+2, TILE-2, TILE-4);
+      // 顶高光
+      octx.fillStyle='#4e8f3f';
+      octx.fillRect(x+2, y+2, TILE-4, 2);
+      // 底阴影
+      octx.fillStyle='#2f5b28';
+      octx.fillRect(x+2, y+TILE-4, TILE-4, 2);
+      // 苔点/木纹
+      const hh=hash(o.seed*7+rx*13, o.seed*5+ry*11);
+      if(hh>0.72){
+        octx.fillStyle='#589e46';
+        octx.fillRect(x+4+Math.floor(hh*4), y+6, 3, 3);
+      } else if(hh<0.22){
+        octx.fillStyle='#26471f';
+        octx.fillRect(x+7, y+8+Math.floor(hh*6), 4, 2);
+      }
+    }
   }
 }
 
