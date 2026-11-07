@@ -81,7 +81,7 @@
              box-shadow:inset 0 1px 0 #5b6472; font-size:18px;
              display:flex; align-items:center; justify-content:center; }
   #menuBtn:active { transform:translateY(2px); }
-  #menuWrap { position:fixed; inset:0; z-index:12; display:flex; align-items:center; justify-content:center; }
+  #menuWrap { position:fixed; inset:0; z-index:120; display:flex; align-items:center; justify-content:center; }
   #menuWrap.hidden { display:none; }
   .menu-box { position:relative; display:flex; gap:16px; animation:popIn .16s ease-out; }
   .menu-sq { width:78px; height:78px; padding:0; display:flex; flex-direction:column; align-items:center;
@@ -106,6 +106,12 @@
   .chk.on { background:#4ade80; border-color:#052e16; }
   .sp-group { border-left:2px solid #1e293b; padding-left:8px; }
   .sp-row { display:flex; align-items:center; gap:10px; }
+  .sp-grid2 { display:grid; grid-template-columns:1fr 1fr; gap:6px; width:100%; }
+  .sp-grid2 .sp-full { padding:8px 6px; font-size:12px; }
+  .sp-grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; width:100%; }
+  .sp-grid3 .sp-full { padding:8px 4px; font-size:11px; }
+  .sp-grid2 .wide { grid-column:1 / -1; }
+  .sp-label { margin-top:2px; }
   .sp-toggle { width:50px; padding:7px 0; font-size:13px; background:#475569; color:#e2e8f0;
                border:2px solid #1e293b; box-shadow:0 2px 0 #1e293b; }
   .sp-toggle.on { background:#4ade80; color:#052e16; border-color:#052e16; }
@@ -265,8 +271,13 @@
     60%  { opacity:1; transform:translateY(-2px) scale(1.06); }
     100% { opacity:1; transform:translateY(0) scale(1); }
   }
-  #quadBtn.spin { animation:quadBtnSpin .34s cubic-bezier(.16,1.2,.4,1); }
-  @keyframes quadBtnSpin { 0%{transform:rotate(0) scale(1)} 50%{transform:rotate(90deg) scale(1.08)} 100%{transform:rotate(0) scale(1)} }
+  #quadBtn.pop { animation:quadBtnPop .3s cubic-bezier(.2,1.15,.35,1); }
+  @keyframes quadBtnPop {
+    0%   { transform:scale(1) }
+    38%  { transform:scale(.88) }
+    72%  { transform:scale(1.07) }
+    100% { transform:scale(1) }
+  }
   #quadItems button { width:46px; height:46px; padding:0; display:flex; align-items:center; justify-content:center;
                       background:linear-gradient(180deg,#2b4a72,#1c3350); border:2px solid #0b2545; border-radius:0;
                       box-shadow:inset 0 1px 0 #4a7ab5, 0 3px 0 #0b2545;
@@ -291,8 +302,16 @@
     70% { opacity:.9 }
     100% { transform:translate(var(--dx),var(--dy)) scale(.25); opacity:0 }
   }
-  .modal:not(.hidden) .modal-box { animation:panelPop .18s cubic-bezier(.2,1.3,.4,1); }
-  #wepTip{position:fixed;z-index:30;min-width:150px;max-width:220px;padding:8px 10px;
+  .modal:not(.hidden) .modal-box { animation:panelPop .34s cubic-bezier(.18,1.12,.32,1) both; }
+  .modal:not(.hidden) .modal-bg { animation:bgFadeIn .22s ease-out both; }
+  /* 面板内元素依次浮现 */
+  .modal:not(.hidden) .modal-box > * { animation:panelItem .3s ease-out both; }
+  .modal:not(.hidden) .modal-box > *:nth-child(2){ animation-delay:.04s }
+  .modal:not(.hidden) .modal-box > *:nth-child(3){ animation-delay:.08s }
+  .modal:not(.hidden) .modal-box > *:nth-child(4){ animation-delay:.12s }
+  .modal:not(.hidden) .modal-box > *:nth-child(5){ animation-delay:.16s }
+  @keyframes panelItem { from{ opacity:0; transform:translateY(8px) } to{ opacity:1; transform:none } }
+  #wepTip{position:fixed;z-index:40;min-width:150px;max-width:220px;padding:8px 10px;
     background:linear-gradient(180deg,#132b47,#0b1a2c);border:2px solid #0b2545;
     box-shadow:0 0 0 1px #60a5fa55,0 8px 22px rgba(0,0,0,.55);
     font-family:Zpix,monospace;color:#dbeafe;font-size:11px;line-height:1.65;pointer-events:none}
@@ -307,7 +326,12 @@
     55%  { transform:translateY(-4px) scale(1.04); opacity:1; filter:brightness(1.1); }
     100% { transform:translateY(0) scale(1); opacity:1; filter:none; }
   }
-  @keyframes panelPop { 0%{ transform:scale(.96) translateY(6px); opacity:.6 } 100%{ transform:none; opacity:1 } }
+  @keyframes panelPop {
+    0%   { transform:scale(.80) translateY(22px); opacity:0 }
+    55%  { transform:scale(1.035) translateY(-4px); opacity:1 }
+    100% { transform:scale(1) translateY(0); opacity:1 }
+  }
+  @keyframes bgFadeIn { from{ opacity:0 } to{ opacity:1 } }
   #charBtn { position:fixed; z-index:12; left:calc(10px + env(safe-area-inset-left, 0px));
              bottom:calc(172px + env(safe-area-inset-bottom, 0px)); width:46px; height:46px; padding:0;
              display:flex; align-items:center; justify-content:center; }
@@ -868,14 +892,15 @@
 <div id="settingsPanel" class="hidden">
   <div class="sp-title">设置<button id="settingsClose" class="sp-close">×</button></div>
   <div id="spMain" class="sp-page">
-    <div class="sp-label">公告</div>
-    <div class="sp-group">
-      <button id="openNotice" class="sp-full">📢 内测公告 / 反馈群</button>
+    <div class="sp-group" style="margin-top:2px">
+      <button id="openNotice" class="sp-full" style="padding:7px 10px;font-size:12px">📢 内测公告 / 反馈群</button>
     </div>
     <div class="sp-label" id="gameLabel">游戏</div>
     <div class="sp-group" id="gameGroup">
-      <button id="pauseGameBtn" class="sp-full sp-alt">暂停游戏</button>
-      <button id="titleBtn" class="sp-full sp-alt">回到标题界面</button>
+      <div class="sp-grid2">
+        <button id="pauseGameBtn" class="sp-full sp-alt">暂停游戏</button>
+        <button id="titleBtn" class="sp-full sp-alt">回到标题</button>
+      </div>
     </div>
     <div class="sp-label">音频</div>
     <div class="sp-group">
@@ -885,16 +910,21 @@
     </div>
     <div class="sp-label">显示</div>
     <div class="sp-group">
-      <button id="fullscreenBtn" class="sp-full">全屏</button>
-      <div class="sp-row"><span class="sp-cap">帧率</span><button class="chk" id="chkFps"></button></div>
-      <div class="sp-row"><span class="sp-cap">小地图</span><button class="chk" id="chkMini"></button></div>
+      <div class="sp-grid3">
+        <button id="fullscreenBtn" class="sp-full">全屏</button>
+        <button class="sp-full sp-alt" id="chkFpsBtn">帧率 <b id="chkFpsTxt">关</b></button>
+        <button class="sp-full sp-alt" id="chkMiniBtn">小地图 <b id="chkMiniTxt">关</b></button>
+      </div>
+      <div class="sp-row" style="display:none"><button class="chk" id="chkFps"></button><button class="chk" id="chkMini"></button></div>
     </div>
     <div class="sp-label">操作</div>
     <div class="sp-group">
-      <button id="vibToggle" class="sp-full sp-alt">振动：开</button>
-      <div class="sp-row"><span class="sp-cap">强度</span><input type="range" id="vibPower" min="0" max="100" value="100"></div>
-      <button id="autoPauseToggle" class="sp-full sp-alt">打开菜单自动暂停：关</button>
-      <button id="hudTapToggle" class="sp-full sp-alt">点击状态栏查看角色：开</button>
+      <div class="sp-grid2">
+        <button id="vibToggle" class="sp-full sp-alt">振动：开</button>
+        <button id="autoPauseToggle" class="sp-full sp-alt">菜单自动暂停：关</button>
+        <button id="hudTapToggle" class="sp-full sp-alt wide">点状态栏看角色：开</button>
+      </div>
+      <div class="sp-row"><span class="sp-cap">振动强度</span><input type="range" id="vibPower" min="0" max="100" value="100"></div>
     </div>
     <div class="sp-label" id="devLabel" style="display:none">开发者</div>
     <div class="sp-group" id="devGroup" style="display:none">
@@ -905,11 +935,12 @@
     </div>
     <div class="sp-label">数据</div>
     <div class="sp-group">
-      <button id="openRedeem" class="sp-full sp-alt">兑换码</button>
-      <button id="openStats" class="sp-full sp-alt">游玩统计</button>
-      <button id="openSave" class="sp-full sp-alt">存档</button>
-      <div id="buildTag" style="font-size:10px;color:#5b7089;text-align:center;padding:4px 0"></div>
-      <div id="buildTag" style="font-size:10px;color:#5b7089;text-align:center;padding:4px 0"></div>
+      <div class="sp-grid3">
+        <button id="openRedeem" class="sp-full sp-alt">兑换码</button>
+        <button id="openStats" class="sp-full sp-alt">统计</button>
+        <button id="openSave" class="sp-full sp-alt">存档</button>
+      </div>
+      <div id="buildTag" style="font-size:10px;color:#5b7089;text-align:center;padding:2px 0"></div>
     </div>
   </div>
   <div id="spSave" class="sp-page hidden">
@@ -2856,7 +2887,7 @@ function frame(now){
   if(state==='city' && !paused){
     sessionSec += dt; stats.totalSec += dt; statPlayAcc += dt; statHitAcc += dt;
     if(gtime - statsFlushAt > 10){ statsFlushAt=gtime; saveStats(); }
-    if(statHitAcc >= 60){ statHitAcc=0; statHit('playtime'); }
+    // 只统计本机，不做任何联网上报
   }
   try{
     if(state==='city' && !paused) update(dt);
@@ -3042,9 +3073,28 @@ function goTitle(){
   document.getElementById('menu').classList.remove('hidden');
   updateHudButtons(); sfxBeep(); vibrate(2);
 }
+function closeAllUiForMenu(){
+  try{
+    const tip=document.getElementById('wepTip'); if(tip) tip.classList.add('hidden');
+    clearTimeout(showWeaponTip && showWeaponTip._t);
+  }catch(e){}
+  try{ if(typeof closeAllPanels==='function') closeAllPanels(); }catch(e){}
+  try{ closeBag && closeBag(); }catch(e){}
+  try{ document.getElementById('craftWrap').classList.add('hidden'); }catch(e){}
+  try{ document.getElementById('colWrap').classList.add('hidden'); }catch(e){}
+  try{ document.getElementById('charWrap').classList.add('hidden'); }catch(e){}
+  try{ document.getElementById('equipWrap').classList.add('hidden'); }catch(e){}
+  try{ document.getElementById('itemMenu').classList.add('hidden'); }catch(e){}
+  try{ document.getElementById('bagOpsMenu').classList.add('hidden'); }catch(e){}
+  try{ document.getElementById('confirmWrap').classList.add('hidden'); }catch(e){}
+  try{ document.getElementById('recipeWrap').classList.add('hidden'); }catch(e){}
+  try{ const q=document.getElementById('quadWrap'); if(q && typeof setQuad==='function') setQuad(false); }catch(e){}
+  try{ if(typeof closeChar==='function') closeChar(); }catch(e){}
+}
 document.getElementById('menuBtn').onclick=()=>{
   const inGame = (state==='city' || state==='arrive');
   if(inGame){
+    closeAllUiForMenu();
     document.getElementById('menuWrap').classList.remove('hidden');
     sfxBeep(); vibrate(2);
     if(autoPause){ pausedAutoMenu=true; paused=true; }
@@ -3104,6 +3154,8 @@ function syncSettingsUI(){
   if(mu){ mu.textContent='一键静音：'+(mutedAll?'开':'关'); mu.classList.toggle('on', mutedAll); }
   const f=document.getElementById('chkFps'); if(f) f.classList.toggle('on', showFps);
   const m=document.getElementById('chkMini'); if(m) m.classList.toggle('on', showMini);
+  const ft=document.getElementById('chkFpsTxt'); if(ft) ft.textContent = showFps?'开':'关';
+  const mt=document.getElementById('chkMiniTxt'); if(mt) mt.textContent = showMini?'开':'关';
   applyMusic(); applySfx();
 }
 function loadCfg(){
@@ -4270,8 +4322,9 @@ function setQuad(open){
     }
   }
   const qb1=document.getElementById('quadBtn');
-  if(qb1 && quadOpen){
-    qb1.classList.remove('spin'); void qb1.offsetWidth; qb1.classList.add('spin');
+  if(qb1){
+    qb1.classList.remove('pop'); void qb1.offsetWidth;
+    if(quadOpen) qb1.classList.add('pop');
   }
   clearTimeout(quadTimer);
   if(quadOpen){
@@ -4783,8 +4836,7 @@ function renderStats(){
     ['启动次数', stats.sessions+' 次'],
     ['首次游玩', stats.firstAt? new Date(stats.firstAt).toLocaleString('zh-CN'):'—'],
     ['', ''],
-    ['全服访问', statRemote.visits!=null? statRemote.visits+' 次':'读取中/不可用'],
-    ['全服游玩', statRemote.playtime!=null? statRemote.playtime+' 分钟':'读取中/不可用'],
+    ['数据范围', '仅本机'],
   ];
   for(const [k,v] of rows){
     if(!k){ const sp=document.createElement('div'); sp.style.height='8px'; body.appendChild(sp); continue; }
@@ -4799,8 +4851,6 @@ document.getElementById('openStats').onclick=()=>{
   document.getElementById('statsTitle').textContent='游玩统计';
   document.getElementById('statsWrap').classList.remove('hidden');
   renderStats();
-  statGet('visits', v=>{ statRemote.visits=v; renderStats(); });
-  statGet('playtime', v=>{ statRemote.playtime=v; renderStats(); });
   sfxBeep();
 };
 document.getElementById('statsClose').onclick=()=>document.getElementById('statsWrap').classList.add('hidden');
@@ -5061,7 +5111,16 @@ function closeChar(){ document.getElementById('charWrap').classList.add('hidden'
 const PANEL_IDS=['bagWrap','equipWrap','colWrap','craftWrap','charWrap'];
 let panelGuardAt=0;
 function panelGuardOk(){ return performance.now()-panelGuardAt > 380; }
+function closeMenuIfOpen(){
+  const m=document.getElementById('menuWrap');
+  if(m && !m.classList.contains('hidden')){
+    m.classList.add('hidden');
+    paused=false; pausedAutoMenu=false;
+    try{ syncPauseIcon(); }catch(e){}
+  }
+}
 function closeAllPanels(exceptId){
+  try{ closeMenuIfOpen(); }catch(e){}
   panelGuardAt=performance.now();
   for(const id of PANEL_IDS){
     if(id===exceptId) continue;
@@ -5122,6 +5181,12 @@ document.getElementById('bagBtn').onclick=()=>{
   document.getElementById('craftWrap').classList.add('hidden');
   openBag();
 };
+{
+  const b1=document.getElementById('chkFpsBtn');
+  if(b1) b1.onclick=()=>document.getElementById('chkFps').onclick();
+  const b2=document.getElementById('chkMiniBtn');
+  if(b2) b2.onclick=()=>document.getElementById('chkMini').onclick();
+}
 document.getElementById('chkFps').onclick=()=>{
   showFps=!showFps;
   document.getElementById('chkFps').classList.toggle('on', showFps);
@@ -7306,7 +7371,7 @@ try{ hasSave=loadGame(); }catch(e){ showFatal('loadGame: '+e.message); }
 try{ syncBagBtn(); }catch(e){ showFatal('syncBagBtn: '+e.message); }
 loadStats();
 stats.sessions++; if(!stats.firstAt) stats.firstAt=Date.now(); saveStats();
-statHit('visits');
+// 不再向公共计数器上报访问
 setInterval(()=>{ saveStats(); }, 20000); last=performance.now(); fpsLast=performance.now(); requestAnimationFrame(frame);
 </script>
 </body>
