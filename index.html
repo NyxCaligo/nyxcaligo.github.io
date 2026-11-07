@@ -1387,7 +1387,39 @@ function buildForestWorld(){
     return true;
   };
   const rndAt=(i,k)=>hash(i*17+k*31+7, i*13+k*7+3);
-  const SHAPES=[[2,2],[2,3],[3,2],[3,3],[3,4],[4,3],[4,4],[1,4],[4,1],[1,5],[5,1],[2,4],[4,2],[3,5],[5,3]];
+  // 形状生成：小矩形随机"啃掉"边角 → 不规则，但不会出现 1 格宽的凸起
+  function growShape(seedBase){
+    let r=seedBase;
+    const rnd=()=>{ r=(r*1103515245+12345)&0x7fffffff; return (r>>>8)/0x7fffff; };
+    const W=3+Math.floor(rnd()*3), H=3+Math.floor(rnd()*2);   // 3~5 宽、3~4 高
+    let cells=[]; for(let y=0;y<H;y++) for(let x=0;x<W;x++) cells.push([x,y]);
+    const neigh=(arr,x,y)=>arr.reduce((a,c)=>a+((Math.abs(c[0]-x)+Math.abs(c[1]-y)===1)?1:0),0);
+    for(let attempt=0; attempt<W*H*2; attempt++){
+      if(cells.length<=5) break;
+      const i=Math.floor(rnd()*cells.length);
+      const rest=cells.filter((_,k)=>k!==i);
+      if(rest.length<4) break;
+      // 连通性检查
+      const seen=new Set(); const q=[rest[0]]; seen.add(rest[0][0]+','+rest[0][1]);
+      while(q.length){
+        const [cx,cy]=q.pop();
+        for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+          const nx=cx+dx, ny=cy+dy, key=nx+','+ny;
+          if(seen.has(key)) continue;
+          if(!rest.some(c=>c[0]===nx&&c[1]===ny)) continue;
+          seen.add(key); q.push([nx,ny]);
+        }
+      }
+      if(seen.size!==rest.length) continue;
+      // 每个剩余格子至少贴 2 个同伴 → 无细小凸起
+      let ok=true;
+      for(const [cx,cy] of rest){ if(neigh(rest,cx,cy)<2){ ok=false; break; } }
+      if(!ok) continue;
+      cells=rest;
+    }
+    const minX=Math.min(...cells.map(c=>c[0])), minY=Math.min(...cells.map(c=>c[1]));
+    return cells.map(c=>[c[0]-minX, c[1]-minY]);
+  }
   const SECT=8;
   let counter=0;
   for(let sy=0; sy<SECT; sy++) for(let sx=0; sx<SECT; sx++){
@@ -1399,19 +1431,18 @@ function buildForestWorld(){
       let placed=false;
       for(let attempt=0; attempt<8 && !placed; attempt++){
         const cc=counter*17+attempt;
-        const shp=SHAPES[Math.floor(rndAt(cc,1)*SHAPES.length)%SHAPES.length];
-        const bw=shp[0], bh=shp[1];
+        const shp=growShape(cc*7919+13);
+        const bw=Math.max(...shp.map(c=>c[0]))+1, bh=Math.max(...shp.map(c=>c[1]))+1;
         const tx=cx0+1+Math.floor(rndAt(cc,2)*Math.max(1,cw-bw-1));
         const ty=cy0+1+Math.floor(rndAt(cc,3)*Math.max(1,chh-bh-1));
         let ok=true;
-        for(let yy=0;yy<bh && ok;yy++) for(let xx=0;xx<bw;xx++){
-          if(!freeTile(tx+xx, ty+yy)){ ok=false; break; }
+        for(const [sx2,sy2] of shp){
+          if(!freeTile(tx+sx2, ty+sy2)){ ok=false; break; }
         }
         if(!ok) continue;
-        for(let yy=0;yy<bh;yy++) for(let xx=0;xx<bw;xx++) obsTile[(ty+yy)*FW+(tx+xx)]=1;
+        for(const [sx2,sy2] of shp) obsTile[(ty+sy2)*FW+(tx+sx2)]=1;
         obstacles.push({
-          x:tx*TILE, y:ty*TILE,
-          w:bw*TILE, h:bh*TILE, seed:cc
+          x:tx*TILE, y:ty*TILE, w:bw*TILE, h:bh*TILE, seed:cc, cells:shp
         });
         placed=true;
       }
@@ -2303,34 +2334,47 @@ function drawForestBush(sx,sy,tx,ty){
   octx.fillStyle='#57a066'; octx.fillRect(sx+9,sy+5,2,2);
 }
 function drawForestObstacle(o, ox0, oy0){
+  const cells=o.cells||null;
   const cols=Math.max(1,Math.round(o.w/TILE));
   const rows=Math.max(1,Math.round(o.h/TILE));
-  for(let ry=0; ry<rows; ry++){
-    for(let rx=0; rx<cols; rx++){
-      const x=o.x+rx*TILE-ox0, y=o.y+ry*TILE-oy0;
-      // 圆角方块（每格独立，像一块块木头/石头）
-      octx.fillStyle='#1d3618';
-      octx.fillRect(x+1, y,   TILE-2, TILE);
-      octx.fillRect(x,   y+1, TILE,   TILE-2);
-      octx.fillStyle='#3d7533';
-      octx.fillRect(x+2, y+1, TILE-4, TILE-2);
-      octx.fillRect(x+1, y+2, TILE-2, TILE-4);
-      // 顶高光
-      octx.fillStyle='#4e8f3f';
-      octx.fillRect(x+2, y+2, TILE-4, 2);
-      // 底阴影
-      octx.fillStyle='#2f5b28';
-      octx.fillRect(x+2, y+TILE-4, TILE-4, 2);
-      // 苔点/木纹
-      const hh=hash(o.seed*7+rx*13, o.seed*5+ry*11);
-      if(hh>0.72){
-        octx.fillStyle='#589e46';
-        octx.fillRect(x+4+Math.floor(hh*4), y+6, 3, 3);
-      } else if(hh<0.22){
-        octx.fillStyle='#26471f';
-        octx.fillRect(x+7, y+8+Math.floor(hh*6), 4, 2);
-      }
+  const list=cells||(()=>{ const a=[]; for(let y=0;y<rows;y++) for(let x=0;x<cols;x++) a.push([x,y]); return a; })();
+  const has=(x,y)=>list.some(c=>c[0]===x && c[1]===y);
+  const dark='#1d3618', mid='#3d7533', lite='#4e8f3f', sh='#2f5b28';
+
+  for(const [rx,ry] of list){
+    const x=o.x+rx*TILE-ox0, y=o.y+ry*TILE-oy0;
+    const openL=!has(rx-1,ry), openR=!has(rx+1,ry);
+    const openU=!has(rx,ry-1), openD=!has(rx,ry+1);
+
+    // 底色（整格铺满，保证连成一片）
+    octx.fillStyle=mid;
+    octx.fillRect(x, y, TILE, TILE);
+
+    // 露出的边才画描边（圆角：边角内缩）
+    octx.fillStyle=dark;
+    if(openU){ octx.fillRect(x+(openL?2:0), y, TILE-(openL?2:0)-(openR?2:0), 1); }
+    if(openD){ octx.fillRect(x+(openL?2:0), y+TILE-1, TILE-(openL?2:0)-(openR?2:0), 1); }
+    if(openL){ octx.fillRect(x, y+(openU?2:0), 1, TILE-(openU?2:0)-(openD?2:0)); }
+    if(openR){ octx.fillRect(x+TILE-1, y+(openU?2:0), 1, TILE-(openU?2:0)-(openD?2:0)); }
+    // 四个外角削掉 2px（圆角）
+    if(openL&&openU) octx.fillRect(x, y, 2, 2);
+    if(openR&&openU) octx.fillRect(x+TILE-2, y, 2, 2);
+    if(openL&&openD) octx.fillRect(x, y+TILE-2, 2, 2);
+    if(openR&&openD) octx.fillRect(x+TILE-2, y+TILE-2, 2, 2);
+
+    // 顶部高光 / 底部阴影（只在露出的边）
+    if(openU){
+      octx.fillStyle=lite;
+      octx.fillRect(x+(openL?2:0), y+1, TILE-(openL?2:0)-(openR?2:0), 2);
     }
+    if(openD){
+      octx.fillStyle=sh;
+      octx.fillRect(x+(openL?2:0), y+TILE-3, TILE-(openL?2:0)-(openR?2:0), 2);
+    }
+    // 苔点
+    const hh=hash(o.seed*7+rx*13, o.seed*5+ry*11);
+    if(hh>0.74){ octx.fillStyle='#589e46'; octx.fillRect(x+4+Math.floor(hh*5), y+6, 3, 3); }
+    else if(hh<0.18){ octx.fillStyle='#26471f'; octx.fillRect(x+7, y+9+Math.floor(hh*5), 4, 2); }
   }
 }
 
