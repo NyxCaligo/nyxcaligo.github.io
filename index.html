@@ -5180,6 +5180,21 @@ function buildMini(){
   }
   for(const b of BUILDINGS){ mctx.fillStyle='#e0b070';
     mctx.fillRect(Math.round(b.x/TILE), Math.round(b.y/TILE), Math.max(1,Math.round(b.w/TILE)), Math.max(1,Math.round(b.h/TILE))); }
+  // 森林障碍物
+  if(mapName==='forest' && typeof forestObstacles!=='undefined' && forestObstacles){
+    for(const o of forestObstacles){
+      const list=o.cells&&o.cells.length?o.cells:null;
+      mctx.fillStyle='#24401c';
+      if(list){
+        for(const [cx,cy] of list){
+          mctx.fillRect(Math.round(o.x/TILE)+cx, Math.round(o.y/TILE)+cy, 1, 1);
+        }
+      } else {
+        mctx.fillRect(Math.round(o.x/TILE), Math.round(o.y/TILE),
+                      Math.max(1,Math.round(o.w/TILE)), Math.max(1,Math.round(o.h/TILE)));
+      }
+    }
+  }
 }
 function drawAmbient(){
   const gx0=Math.max(0,Math.floor(camX/TILE)), gx1=Math.min(WCOLS,Math.ceil((camX+VW)/TILE));
